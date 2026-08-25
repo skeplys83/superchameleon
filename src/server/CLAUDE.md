@@ -76,6 +76,11 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
 - **Messages out** (→ `client/net/client.ts`): `shot`, `whistle`, `mark`,
   `caught`, `clearSkin`, `paint`, `chat`, `moveTo`, `moveFailed`. **There is no
   "match over" message** — `moveTo` is the news.
+- **`setMap` is refused once the countdown is running.** Everyone is already
+  preloading the map the phase change told them to fetch, so a switch at second
+  four sends half the lobby somewhere the other half is not going. The lobby
+  panel greys the picker out as well; this is the half that holds, and
+  `test/lobby.test.ts` pins it.
 - **`chat` is a waiting-room message**, refused in a match and refused in a
   lobby outside `waiting` and `countdown`. A match never carries it because a
   channel between the people being hunted is coordination against the one

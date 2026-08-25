@@ -19,7 +19,7 @@ reads them too. This folder is the three.js half.
 
 ## A map is one `.glb`, and this repo has no part in making one
 
-`levels/<id>.blend` is the map, `public/maps/<id>.glb` is its export, and the row
+`levels/<id>/<id>.blend` is the map, `public/maps/<id>.glb` is its export, and the row
 in `shared/maps.ts` is a name plus the few numbers the game needs before the file
 has loaded. **There is no build step and no generated file.** The naming
 conventions the loader reads — `col_*`, `colhull_*`, `coltri_*`, `colball_*` for

@@ -11,6 +11,12 @@ const hitNormal = new THREE.Vector3();
 /** Scratch for the second pass, which tests the lens's *final* seat. */
 const settled = new THREE.Vector3();
 const toSettled = new THREE.Vector3();
+/** Scratch for the ground probe, which starts a little above the lens. */
+const probe = new THREE.Vector3();
+const DOWN = new THREE.Vector3(0, -1, 0);
+/** How far above the lens the ground probe starts, so a lens already a hair
+ *  under the surface still finds it. */
+const PROBE_RISE = 0.5;
 
 /**
  * Last frame's distance. Only the *distance* is smoothed — the camera itself is
@@ -43,8 +49,6 @@ export function followThirdPerson(
 
   toCamera.copy(lookDir).negate().normalize();
   let distance = zoom;
-  // The height the lens may not go below, when what is in the way is the floor.
-  let floor = -Infinity;
   if (shell.length) {
     ray.set(lookAt, toCamera);
     ray.far = zoom;
@@ -56,11 +60,11 @@ export function followThirdPerson(
       // **The ground is slid along, not backed away from.** Pulling in on a
       // floor hit is what put the lens inside a lying player: the aim point is
       // barely above the ground, so any look from below the horizon crosses it
-      // within a metre and the shot collapses to the minimum distance. Lifting
-      // instead keeps the whole zoom and skims the surface, which is what a
-      // player crouching to look at something along the floor expects.
-      if (hitNormal.y > 0.5) floor = blocked.point.y + CAMERA_SKIN;
-      else
+      // within a metre and the shot collapses to the minimum distance. Skimming
+      // instead keeps the whole zoom, which is what a player crouching to look
+      // at something along the floor expects. The skim itself is applied below,
+      // measured under the *lens* rather than from this ray.
+      if (hitNormal.y <= 0.5)
         distance = Math.max(
           CAMERA_MIN_DISTANCE,
           blocked.distance - CAMERA_SKIN,
@@ -81,7 +85,43 @@ export function followThirdPerson(
   else held += (distance - held) * (1 - Math.pow(0.0001, delta));
 
   settled.copy(lookAt).addScaledVector(toCamera, held);
-  if (settled.y < floor) settled.y = floor;
+
+  // **Skimming the ground, measured under the lens.**
+  //
+  // Two things used to go wrong here, and both came from taking the floor off
+  // the *orbit ray*: the lens was lifted the moment that ray grazed the ground
+  // anywhere along its length, which is long before the lens itself is near it
+  // — so it jumped `CAMERA_SKIN` in one frame, the pop — and the lift was a
+  // straight `settled.y = floor`, which shortens the leg to the body and leaves
+  // the lens off the orbit entirely, so further mouse movement did nothing.
+  //
+  // Sampling straight down from where the lens actually is fixes the first: the
+  // clamp engages exactly as it touches the skin distance, continuously. Taking
+  // the lift out of the *horizontal* leg fixes the second: the distance to the
+  // body is preserved, so the camera slides around its own sphere instead of
+  // being dragged off it.
+  if (shell.length) {
+    probe.copy(settled).setY(settled.y + PROBE_RISE);
+    ray.set(probe, DOWN);
+    ray.far = PROBE_RISE + CAMERA_SKIN;
+    const ground = ray.intersectObjects(shell, false)[0];
+    const lowest = ground ? ground.point.y + CAMERA_SKIN : -Infinity;
+    if (settled.y < lowest) {
+      const rise = lowest - lookAt.y;
+      const flat = Math.sqrt(Math.max(0, held * held - rise * rise));
+      const spread = Math.hypot(toCamera.x, toCamera.z);
+      if (spread > 1e-4 && flat > 1e-4) {
+        settled.set(
+          lookAt.x + (toCamera.x / spread) * flat,
+          lowest,
+          lookAt.z + (toCamera.z / spread) * flat,
+        );
+      } else {
+        // Straight up or straight down: there is no horizontal leg to lengthen.
+        settled.y = lowest;
+      }
+    }
+  }
 
   // **Second pass, because the floor lift moves the lens off the ray that
   // cleared it.** Raising the camera to skim the ground is a sideways step out

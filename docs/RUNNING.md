@@ -51,7 +51,7 @@ console says so when it is blocked.
 
 **`./scripts/export-level.sh <id>` rebuilds a map, and bakes what needs baking**
 — about 2.5 s for the dungeon, of which the dirt ground's Cycles bake and its
-tiling check are ~1 s. It rewrites `levels/textures/dirt_ground.png` as it goes,
+tiling check are ~1 s. It rewrites `levels/dungeon/textures/dirt_ground.png` as it goes,
 so that file turning up modified after an export is the pipeline working.
 
 Useful env vars: `PORT` (web, default 3000), `GAME_PORT` (Colyseus, default 2567 in dev, defaults to `PORT` in production for single-port hosting),

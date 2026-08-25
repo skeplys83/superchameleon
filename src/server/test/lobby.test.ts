@@ -66,6 +66,18 @@ describe("a lobby", () => {
     expect(host.state.nextMap).toBe(DEFAULT_MATCH_MAP);
   });
 
+  it("refuses a map change once the countdown is running", async () => {
+    const host = await openLobby({ map: "dungeon", maxPlayers: MIN_PLAYERS });
+    await joinLobby(host.roomId, "guest");
+    expect(host.state.phase).toBe("countdown");
+
+    // The map everybody is already preloading cannot be swapped under them.
+    host.send("setMap", { map: "hospital" });
+    await settle();
+
+    expect(host.state.nextMap).toBe("dungeon");
+  });
+
   it("ignores start and setMap from anyone but the host", async () => {
     const host = await openLobby({ map: "dungeon" });
     const guest = await joinLobby(host.roomId, "guest");

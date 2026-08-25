@@ -114,6 +114,12 @@ between orientations with the same damping the joints use.
 
 ## Contracts
 
+- **A pose's `centre.y` has to track its `offsetY`.** `offsetY` moves the
+  *figure* inside its collider; `centre` moves the *collider*. They describe the
+  same shift and must agree, or the box hangs below the body — and since a pose
+  change keeps the box's **underside** put (`players/Player.tsx`), the body is
+  then seated on a floor its own feet are not touching. `curl` sat at half its
+  figure's shift and floated a curled chameleon 0.07 above the ground.
 - **`POSE_COUNT` lives in `shared/protocol.ts`** and `poses.ts` throws on import
   if its table disagrees, so the two can never drift.
 - **`safePose` guards everything off the wire.**

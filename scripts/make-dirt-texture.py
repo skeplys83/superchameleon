@@ -1,11 +1,11 @@
 """
 The dungeon's dirt ground, generated rather than painted.
 
-    blender levels/dungeon.blend --background --python scripts/make-dirt-texture.py
+    blender levels/dungeon/dungeon.blend --background --python scripts/make-dirt-texture.py
 
 or, with the file already open, run it from Blender's text editor (or through the
 MCP server) — it updates the `dirt_ground` image datablock in place and rewrites
-`levels/textures/dirt_ground.png`, so the viewport shows the new one immediately.
+`levels/dungeon/textures/dirt_ground.png`, so the viewport shows the new one immediately.
 
 **Why a script and not a shader node graph.** glTF cannot carry procedural
 nodes, so anything built out of Noise and Voronoi has to be baked before it can

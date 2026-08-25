@@ -36,7 +36,13 @@ yarn-error.log*
 .vscode/
 
 # level authoring intermediates
-/levels/*.placements.json
+/levels/**/*.placements.json
+
+# A kit's original 2K/4K source maps. The .blend points at the resized copies
+# beside them (textures512/), which are what the export embeds — committing the
+# originals would put 114 MB in history for images the game never sees. Keep
+# them locally; re-download the kit if a checkout needs them again.
+/levels/hospital/textures/
 
 # Blender save backups
 *.blend1

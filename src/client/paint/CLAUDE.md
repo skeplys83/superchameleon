@@ -152,6 +152,17 @@ one number and grows the schema.
   two like footnotes. **They still do different kinds of thing**: `white`
   reloads the brush, `clear` wipes the body and paint has no undo, so the
   labels stay distinct even though the buttons match.
+- **The ring is lifted along the line of sight, never along the normal.** A
+  normal offset is invisible on a face turned toward you and slides the ring off
+  the cursor on one turned away — which is every limb where it rounds off. Moving
+  toward the eye keeps the centre on the cursor's own ray whatever the surface is
+  doing; the normal still decides which way the ring *faces*. It draws with
+  `depthTest: false`, so the lift was never holding off z-fighting.
+- **`MIN_SIZE` is a texel floor, not a taste.** At 0.008 a dab is about four
+  texels of the 1024² skin across its radius, and `MIN_STEP` in `brushCursor.ts`
+  still sits under that radius so the finest line is continuous. Below it a dab
+  starts disappearing between texels rather than getting thinner — the lever for
+  finer than this is `TEXTURE_SIZE`, at four times the canvas per player.
 - **The brush ring is where the eyedropper is advertised.** Hovering your own
   body is the moment somebody is thinking about colour, so the ring appearing
   brings "F to pick a colour" with it, and the label goes the instant the pick

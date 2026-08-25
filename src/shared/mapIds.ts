@@ -1,5 +1,5 @@
 /** The map ids, and nothing else. */
-export const MAP_IDS = ["arena", "dungeon"] as const;
+export const MAP_IDS = ["arena", "dungeon", "hospital"] as const;
 
 export type MapId = (typeof MAP_IDS)[number];
 

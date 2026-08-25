@@ -41,11 +41,14 @@ size_kb() { du -k "$1" | cut -f1; }
 
 export_one() {
   id=$1
-  blend="$levels/$id.blend"
+  # One folder per level: levels/<id>/<id>.blend, with whatever it references
+  # beside it. That is what keeps image paths relative, so a level opens on any
+  # checkout, and it is where bake-material.py writes too.
+  blend="$levels/$id/$id.blend"
   glb="$repo/public/maps/$id.glb"
 
   if [ ! -f "$blend" ]; then
-    echo "no such level: levels/$id.blend" >&2
+    echo "no such level: levels/$id/$id.blend" >&2
     exit 1
   fi
 
@@ -80,13 +83,13 @@ if [ $# -gt 0 ]; then
   for id in "$@"; do export_one "$id"; done
 else
   found=0
-  for blend in "$levels"/*.blend; do
-    [ -e "$blend" ] || continue
+  for dir in "$levels"/*/; do
+    id=$(basename "$dir")
+    [ -f "$dir$id.blend" ] || continue
     found=1
-    id=$(basename "$blend" .blend)
     export_one "$id"
   done
-  [ "$found" -eq 1 ] || { echo "no .blend files in levels/" >&2; exit 1; }
+  [ "$found" -eq 1 ] || { echo "no levels/<id>/<id>.blend found" >&2; exit 1; }
 fi
 
 echo

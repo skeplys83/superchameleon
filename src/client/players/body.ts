@@ -58,8 +58,11 @@ const HUNTER = 0.52;
  */
 export const BODY_SCALE: Record<Role, number> = {
   hunter: 0.92,
-  /** A little smaller again — a chameleon is the one trying to be scenery. */
-  chameleon: 0.86,
+  /** A little smaller again — a chameleon is the one trying to be scenery, and
+   *  the smaller it is against a furnished room the more of that room can hide
+   *  it. Everything proportional follows: collider, figure, eye height, brush
+   *  ring, stride, cling tolerance, and every pose box in `figure/poses.ts`. */
+  chameleon: 0.78,
 };
 
 export const BODY: Record<Role, [hx: number, hy: number, hz: number]> = {

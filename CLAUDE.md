@@ -89,7 +89,7 @@ Inside `client/`:
 
 | folder     | owns                                                    | read it before touching                       |
 | ---------- | ------------------------------------------------------- | --------------------------------------------- |
-| `app/`     | `Game.tsx`, `Scene.tsx`, the session hooks, dev mode     | state, modes, preloading, frame priorities    |
+| `app/`     | `Game.tsx`, `Scene.tsx`, the session hooks, dev mode    | state, modes, preloading, frame priorities    |
 | `net/`     | the Colyseus **client**, remotes, which room you are in | joining, moving rooms, remote transforms      |
 | `world/`   | loading a map's `.glb`, collision, lighting             | room layout, cover, editing a map             |
 | `figure/`  | the rig, the poses, `PART_SHAPE`                        | proportions, poses, limb geometry             |
@@ -121,12 +121,12 @@ change, so it was demoted: each short doc links to its archive.
 **The rule going forward:** if a test can assert it, write the test instead of
 the paragraph. Prose cannot fail CI.
 
-|                                        |                                                                                     |
-| -------------------------------------- | ------------------------------------------------------------------------------------- |
+|                                        |                                                                                               |
+| -------------------------------------- | --------------------------------------------------------------------------------------------- |
 | [docs/TRAPS.md](docs/TRAPS.md)         | eight project-wide traps. **Numbered, and referenced by number from code all over the repo.** |
-| [docs/RUNNING.md](docs/RUNNING.md)     | the scripts, the ports, the env vars, and how `public/` and `dist/` relate           |
-| [docs/VERIFYING.md](docs/VERIFYING.md) | the gates: what the tests cover and what still needs a browser                        |
-| [docs/notes/](docs/notes/)             | the archived long-form doc for each folder                                            |
+| [docs/RUNNING.md](docs/RUNNING.md)     | the scripts, the ports, the env vars, and how `public/` and `dist/` relate                    |
+| [docs/VERIFYING.md](docs/VERIFYING.md) | the gates: what the tests cover and what still needs a browser                                |
+| [docs/notes/](docs/notes/)             | the archived long-form doc for each folder                                                    |
 
 Code comments stay thin: at most a few lines, saying what is not visible from the
 line they sit on. A rule with a bug attached belongs in a `CLAUDE.md`, once.
@@ -139,12 +139,12 @@ commit`.
 
 ## Checking your work
 
-| command             | what it proves                                                    |
-| ------------------- | ------------------------------------------------------------------- |
-| `npm run typecheck` | both projects compile, and neither half used the other's globals   |
+| command             | what it proves                                                                                                         |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck` | both projects compile, and neither half used the other's globals                                                       |
 | `npm test`          | the server suite in `src/server/test/`: 90 tests over the rooms, the draw, the clock, the lobby's chat, and the filter |
-| `npm run lint`      | the import boundaries, and the React rules                         |
-| `npm run build`     | the client bundles                                                  |
+| `npm run lint`      | the import boundaries, and the React rules                                                                             |
+| `npm run build`     | the client bundles                                                                                                     |
 
 The **client has no automated tests** — it is three.js in a frame loop — so a
 change there is checked by running it. See [docs/VERIFYING.md](docs/VERIFYING.md).
@@ -190,12 +190,12 @@ gamedistribution/   the one page uploaded to the portal — an iframe wrapper
 ```
 
 **Every map is one `.glb` exported from Blender, and the repo has no part in
-making one.** `levels/<id>.blend` is the map, `public/maps/<id>.glb` is its
+making one.** `levels/<id>/<id>.blend` is the map, `public/maps/<id>.glb` is its
 export, and the row in `shared/maps.ts` is a display name plus the few numbers
 the game needs before the file has loaded. There is no build step between the
 .blend and the .glb.
 
-**The dungeon's ground is generated, though.** `levels/textures/` holds a PNG per
+**The dungeon's ground is generated, though.** `levels/dungeon/textures/` holds a PNG per
 procedural material — one today, the dirt ground — baked out of a Blender node
 group by the export, with a `.bake.json` beside it recording the sliders it came
 from. They are committed, because glTF cannot carry a node
@@ -226,8 +226,29 @@ no test for the round trip home or for reconnection into a held seat. Each
 folder's doc ends with the gaps specific to it.
 
 # Ignore these links
-https://kenney.nl/assets/category:3D
-https://kaylousberg.itch.io/kaykit-dungeon-pack
+https://kaylousberg.itch.io/kaykit-dungeon-pack - old one used
+https://blendervoyage.itch.io/psx-style-modular-low-poly-dungeon
+https://atomicrealm.itch.io/post-apocalyptic-interiors
+https://joethejunkbox.itch.io/psx-subway-station
+https://vyrez-games.itch.io/psx-horror-house-modular-pack-v1
+https://amos-makes.itch.io/psx-hospital-pack
+https://madduck.itch.io/modular-3d-hospital-environment
+https://ink-ribbon.itch.io/psx-restroom-environment-asset-pack
+https://retroshaper.itch.io/dungeon-maker-with-geometry-nodes - interesting duengon
+https://lewie-kowalski.itch.io/psx-retro-props-pack
+https://mcpato.itch.io/house-interior-psx-assets
+https://blendervoyage.itch.io/psx-style-modular-low-poly-dungeon 
+https://quaternius.itch.io/medieval-village-megakit
+https://loafbrr.itch.io/mines-and-cave-set
+https://amos-makes.itch.io/psx-office-pack
+https://aquicor.itch.io/psx-low-poly-kitchen-food-props-pack
+
+https://valsekamerplant.itch.io/psx-style-urban-stacked-pack
+https://mcpato.itch.io/barranco-bar-ps1-environment
+https://mcpato.itch.io/tombo-store-ps1-environment
+
+
+
 https://freesound.org/people/Seth_Makes_Sounds/sounds/680134/
 https://freesound.org/people/NHumphrey/sounds/204466/
 

@@ -235,8 +235,16 @@ export const POSES: Pose[] = [
     // A crouch-sized block around the torso, which the curl carries forward
     // and up — hence the centre. Knees, elbows and the back of the head are
     // outside it on purpose; the silhouette is 1.26 x 0.57 x 1.00.
+    //
+    // **`centre.y` tracks `offsetY`.** The box is 0.56 tall against a 0.57
+    // silhouette, so it wraps the ball almost exactly — but only if it is
+    // shifted by as much as the figure itself is. It used to sit at half the
+    // figure's shift, which hung 0.075 of empty box under the body: the pose
+    // change keeps the box's *underside* put (`Player.tsx`), so the body was
+    // seated on a floor its own feet were not touching, and a curled chameleon
+    // floated.
     half: [0.24, 0.28, 0.24],
-    centre: [0, 0.075, 0.18],
+    centre: [0, 0.15, 0.18],
     flat: "none",
     rootX: 0,
     offsetY: 0.15,

@@ -72,8 +72,10 @@ const HEAD_BUMP = 0.4;
 const TURN_SPEED = 2.6; // rad/s for Q/E
 
 /** Thickness of the hover ring in world units — constant, so the outline does
- *  not thin out or fatten as the brush grows. */
-const RING_BORDER = 0.012;
+ *  not thin out or fatten as the brush grows. Thin on purpose: the ring's
+ *  *radius* scales with the body, so on a smaller chameleon a fat border eats
+ *  the preview it is supposed to outline. */
+const RING_BORDER = 0.003;
 
 const forward = new THREE.Vector3();
 const right = new THREE.Vector3();

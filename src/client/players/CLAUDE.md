@@ -103,6 +103,19 @@ Four things do **not** follow from `BODY`, and three of them are deliberate:
 - **The name badge's gap** above a remote head is scaled in `RemotePlayers.tsx`,
   because it is a distance from a body rather than a distance in the room.
 
+## The follow camera skims the ground from under the lens, not along the ray
+
+The floor used to be taken off the *orbit ray*, which meant the lens was lifted
+as soon as that ray grazed the ground anywhere along its length — long before
+the lens was near it — so it jumped `CAMERA_SKIN` in a single frame. And the
+lift was `settled.y = floor`, which shortens the leg to the body and takes the
+lens off its own orbit, so further mouse movement moved nothing: the "stuck"
+camera. Now the probe is cast **straight down from where the lens actually is**,
+so the clamp engages continuously, and the lift is taken out of the *horizontal*
+leg, so the distance to the body is preserved and the camera slides around its
+sphere. Floor hits still never pull the camera *in* — that is what put the lens
+inside a lying player.
+
 ## The follow camera tests where the lens *ends up*, not where it was aimed
 
 Two passes, and the second one is not redundant. The first raycasts from the

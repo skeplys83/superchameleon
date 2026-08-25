@@ -16,6 +16,11 @@ const CREDITS = [
     where: "kaylousberg.itch.io/kaykit-dungeon-pack",
   },
   {
+    what: "Hospital kit — walls, floors, ceilings, fixtures, furniture",
+    who: "Free Modular 3D hospital environment by Madduck",
+    where: "madduck.itch.io/modular-3d-hospital-environment",
+  },
+  {
     what: "Additional 3D assets",
     who: "Kenney",
     where: "kenney.nl/assets/category:3D",

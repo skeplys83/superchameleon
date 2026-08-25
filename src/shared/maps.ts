@@ -124,11 +124,54 @@ export const MAPS: Record<MapId, GameMap> = {
       fog: null,
     },
   },
+  hospital: {
+    id: "hospital",
+    name: "Hospital",
+    blurb: "An entrance hall, a waiting room, and two ward wings off double-height corridors.",
+    src: "/maps/hospital.glb",
+    spawn: [0, 3.2, 0],
+    // Built on a 2 m grid, then scaled 1.6x so a wall is 4 m like the dungeon's —
+    // collision now reaches 44, so the symmetric clamp has to clear it.
+    bound: 45,
+    roundSeconds: 240,
+    sky: false,
+    background: "#0b0f0d",
+    render: {
+      lights: {
+        // 25 ceiling lamps, none casting: the map is lit by its own fixtures.
+        scale: 0.05,
+        distance: 20,
+        ambient: { intensity: 0.35, color: "#eaf2ee" },
+      },
+      toneMapping: "AgXToneMapping",
+      exposure: 1.0,
+      outputColorSpace: "SRGBColorSpace",
+      antialias: true,
+      dpr: [1, 1.5],
+      shadows: { enabled: false },
+      fog: null,
+    },
+  },
 };
 
 export const MAP_LIST: GameMap[] = MAP_IDS.map((id) => MAPS[id]);
 
 export const MATCH_MAP_LIST: GameMap[] = MATCH_MAP_IDS.map((id) => MAPS[id]);
+
+/**
+ * Maps that are still being built, and are offered only by a dev build.
+ *
+ * The server still accepts them — it has no idea which build asked, and a
+ * second source of truth for "is this map real" is worse than a menu that does
+ * not offer one. This is about what a player is shown, the same way Quick play
+ * is: `DEV` is substituted by vite, so in the image the entry is dead code and
+ * the map is unreachable from the UI.
+ */
+export const DEV_ONLY_MAPS: ReadonlySet<MapId> = new Set<MapId>(["hospital"]);
+
+/** The match maps a build may offer. Pass `DEV` from `app/dev.ts`. */
+export const playableMaps = (dev: boolean): GameMap[] =>
+  MATCH_MAP_LIST.filter((m) => dev || !DEV_ONLY_MAPS.has(m.id));
 
 for (const id of MAP_IDS) {
   if (!MAPS[id]) throw new Error(`world/maps.ts has no entry for map id "${id}"`);

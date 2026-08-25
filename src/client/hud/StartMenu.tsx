@@ -3,6 +3,7 @@ import { fetchSessions, type Game } from "@/client/net";
 import { randomName } from "@/shared/names";
 import { mapName, type MapId } from "@/shared/maps";
 import { CreateGamePanel } from "./CreateGamePanel";
+import { MapList } from "./MapList";
 import { LegalPage } from "./LegalPage";
 import { Footer } from "./Footer";
 import { getInitialInviteRoom } from "@/client/app/crazygames";
@@ -96,7 +97,11 @@ export function StartMenu({
 
   return (
     <div className="absolute inset-0 bg-neutral-950/90 text-neutral-100 backdrop-blur-sm">
-      <div className="flex h-full flex-col items-center justify-center gap-8 overflow-y-auto py-10 pb-16">
+      {/* Centred when it fits, scrolled when it does not. `justify-center` on the
+          scroller itself clips the top of anything taller than the viewport —
+          the min-h-full inner column is what keeps both behaviours. */}
+      <div className="h-full overflow-y-auto">
+        <div className="flex min-h-full flex-col items-center justify-center gap-8 py-10 pb-16">
         <div className="flex flex-col items-center gap-2">
           <h1 className="text-3xl font-semibold tracking-tight">Super Chameleon</h1>
           <p className="max-w-md text-center text-xs text-neutral-500">
@@ -113,7 +118,15 @@ export function StartMenu({
           className="w-64 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-center text-sm outline-none focus:border-neutral-500"
         />
 
-        <div className="grid w-full max-w-3xl grid-cols-1 items-stretch gap-10 px-6 md:grid-cols-2">
+        {/* A third and two thirds. Both carry a min width, so on a screen too
+            narrow to honour the split the row wraps and the page scrolls
+            rather than squeezing either side into uselessness. */}
+        <div className="flex w-full max-w-7xl flex-wrap items-stretch justify-center gap-10 px-6">
+          <div className="h-[70vh] min-h-[26rem] min-w-[20rem] grow basis-[calc(33.333%-1.25rem)]">
+            <MapList />
+          </div>
+
+          <div className="grid min-w-[20rem] grow basis-[calc(66.667%-1.25rem)] grid-cols-1 items-stretch gap-10 md:grid-cols-2">
           <div className="flex flex-col gap-8">
             {/* ── Open a game of your own ─────────────────────────────────── */}
             <section>
@@ -191,7 +204,7 @@ export function StartMenu({
           </div>
 
           {/* ── What is open right now ────────────────────────────────────── */}
-          <div className="relative min-h-[240px]">
+          <div className="relative min-h-[18rem]">
             <section className="absolute inset-0 flex min-h-0 flex-col rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
               <div className="mb-2 flex shrink-0 items-baseline justify-between">
                 <span className="text-[11px] uppercase tracking-widest text-neutral-500">
@@ -228,6 +241,7 @@ export function StartMenu({
               </div>
             </section>
           </div>
+          </div>
         </div>
 
         {!ready && <p className="text-xs text-neutral-600">Looking for the game server…</p>}
@@ -241,6 +255,7 @@ export function StartMenu({
             }}
           />
         )}
+        </div>
       </div>
 
       <Footer onLegal={() => setLegal(true)} />

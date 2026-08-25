@@ -4,10 +4,10 @@
 
 ## What's here
 
-The start menu and its create-game modal, the lobby panel, the player list, the
-phase banner, the pause and dropped panels, the round-over panel, the controls
-legend, the loading screen, the mobile gate, the legal page, and the developer
-readout.
+The start menu, its create-game modal and its map list, the lobby panel, the
+player list, the phase banner, the pause and dropped panels, the round-over
+panel, the controls legend, the loading screen, the mobile gate, the legal page,
+and the developer readout.
 
 **The fallback player names are no longer here.** They moved to
 `shared/names.ts` when the server started handing them out too — it replaces a
@@ -52,8 +52,36 @@ reads them from there now.
   match player "return to the waiting room", which dropped them into a lobby
   whose clock was still running — indistinguishable from still being in the
   round. Either you are playing it or you are out.
-- **The map picker lists `MATCH_MAP_LIST`, never `MAP_LIST`**: the arena is
-  where you already are.
+- **Every map picker asks `playableMaps(DEV)`, never `MATCH_MAP_LIST`.** Two
+  things are filtered out: the arena, which is where you already are, and any id
+  in `DEV_ONLY_MAPS` — a map still being built. `DEV` is substituted by vite, so
+  in the image those entries are dead code and the map cannot be reached from
+  the UI. **The server still accepts them**: it cannot tell which build asked,
+  and a second source of truth for "is this map real" is worse than a menu that
+  simply does not offer one. This is the Quick play rule, applied to maps.
+- **The map appears in three places, at three weights.** `MapList` on the start
+  menu is the showcase and takes **the left third**, with the game select in the
+  other two. Both sides carry a min width and the row is `flex-wrap`, so a
+  window too narrow to honour the split **wraps and the page scrolls** instead of
+  squeezing either into uselessness — which is also why the scroller is a plain
+  `overflow-y-auto` around a `min-h-full` column rather than a `justify-center`
+  flex box: centring the scroller itself clips the top of anything taller than
+  the viewport. The shelf carries **no border and no plate** — the cards have
+  their own, and a frame around a column of framed cards is chrome for nothing.
+  **The parent owns its height**; the panel is `h-full` and scrolls inside,
+  because a list that grew the page would push Create and Join off the bottom
+  the moment a fourth map landed. The create modal is **equal 3:2 tiles
+  with the name only**, three to a row — it is a choice being made, and
+  repeating the blurb there gave every map a different height and a ragged grid.
+  The ratio is fixed rather than the height, so the tiles stay the same shape at
+  any modal width and a long map name wraps inside one instead of growing it. The lobby panel is the
+  smallest: chips, because the decision is already made and this is the host
+  changing their mind.
+- **The map is frozen for the countdown.** The picker greys out the moment
+  `phase` is `countdown` and the server refuses `setMap` alongside it — everyone
+  is already preloading what the phase change told them to fetch, so a switch at
+  second four sends half the lobby somewhere the other half is not going. The
+  greying is the display half of that rule; `lobby.test.ts` pins the server half.
 - **A listed game shows the players in the whole game**, across both its rooms.
 - **`ChatPanel` owns bottom-left, and only its bottom box has a background.**
   The other three corners are taken — `PlayerList`, `ControlsPanel`,

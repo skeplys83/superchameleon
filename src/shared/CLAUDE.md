@@ -39,6 +39,12 @@ doc names the constant beside the number for exactly this reason.
 - **`maps.ts` is read by the server** for `mapRoundSeconds` and `mapLimit`, and
   by the client for everything else. It is pure data, which is why it lives here
   rather than in `client/world/`.
+- **`DEV_ONLY_MAPS` hides a map from the menus, not from the server.** A map
+  still being built is filtered out by `playableMaps(dev)`, which every picker
+  calls with `DEV` — vite substitutes that, so in the image the entry is dead
+  code. The server keeps accepting the id: it cannot tell which build asked, and
+  a second source of truth for "is this map real" is worse than a menu that
+  simply does not offer one.
 - **`POSE_COUNT` is checked against `figure/poses.ts`** at import time.
 - **`CLING_NONE` / `CLING_WALL` / `CLING_CEILING` are ordered so `!== CLING_NONE`
   still means "is clinging"**, which is all `sound/` ever asks. It was a boolean

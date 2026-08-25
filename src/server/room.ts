@@ -202,8 +202,15 @@ export class GameRoom extends Room<GameState> {
 
     // The host may still change their mind while people are arriving. It only
     // moves `nextMap`: the lobby's own geometry never changes under anyone.
+    //
+    // **Not once the countdown is running.** Everyone is already being told
+    // which map they are about to load — `app/` preloads it on the phase change
+    // — so a switch at second four sends half the lobby to a map the other half
+    // is not fetching. The picker greys out client-side too; this is the check
+    // that actually holds.
     this.onMessage("setMap", (client: Client, msg: { map?: unknown }) => {
       if (!this.isLobby || client.sessionId !== this.state.hostId) return;
+      if (this.starting || this.state.phase !== "waiting") return;
       const map = String(msg?.map ?? "");
       if (!MATCH_MAP_IDS.includes(map as never)) return;
       this.state.nextMap = map;

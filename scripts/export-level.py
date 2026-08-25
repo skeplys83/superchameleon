@@ -46,16 +46,27 @@ for child in bpy.context.view_layer.layer_collection.children:
 # past it — `collision` is the one you always want out of the way — exports as
 # if it were not in the file. Hiding the colliders that way silently shipped a
 # dungeon with nothing to stand on. Restored after, so the .blend is untouched.
+# Nested collections count: a level grouped as map/{floor,walls,ceiling,...} hides
+# its lid or its lights one level down, and walking only the top level shipped a
+# map with no ceiling and no lighting.
 unhidden = []
-for child in bpy.context.view_layer.layer_collection.children:
-    if child.name == "kit":
-        continue
-    if child.exclude or child.hide_viewport or child.collection.hide_viewport:
-        print(f"  ! the '{child.name}' collection was hidden — showing it for this export")
-        unhidden.append((child, child.exclude, child.hide_viewport, child.collection.hide_viewport))
-        child.exclude = False
-        child.hide_viewport = False
-        child.collection.hide_viewport = False
+
+
+def unhide(layer_collection):
+    for child in layer_collection.children:
+        if child.name == "kit":
+            continue
+        if child.exclude or child.hide_viewport or child.collection.hide_viewport:
+            print(f"  ! the '{child.name}' collection was hidden — showing it for this export")
+            unhidden.append((child, child.exclude, child.hide_viewport,
+                             child.collection.hide_viewport))
+            child.exclude = False
+            child.hide_viewport = False
+            child.collection.hide_viewport = False
+        unhide(child)
+
+
+unhide(bpy.context.view_layer.layer_collection)
 
 hidden_objects = []
 for obj in bpy.data.objects:

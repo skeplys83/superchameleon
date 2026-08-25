@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { DEFAULT_MATCH_MAP, MATCH_MAP_LIST, type MapId } from "@/shared/maps";
+import { DEFAULT_MATCH_MAP, playableMaps, type MapId } from "@/shared/maps";
+import { DEV } from "@/client/app/dev";
 import { MAX_PLAYERS, MIN_PLAYERS } from "@/shared/protocol";
 
 /** The three choices you only get to make once, in a modal over the menu. */
@@ -43,21 +44,24 @@ export function CreateGamePanel({
         <div className="mb-2 text-[11px] uppercase tracking-widest text-neutral-500">
           Map
         </div>
-        <div className="mb-5 flex flex-col gap-2">
-          {MATCH_MAP_LIST.map((m) => (
+        {/* Equal tiles, name only. Three to a row with a fixed 3:2 ratio, so
+            every map is the same size and shape whatever it is called and
+            however many there are — the name is centred and wraps inside the
+            tile rather than setting its height. The blurb lives on the start
+            menu's map list, where there is room for it beside a preview. */}
+        <div className="mb-5 grid grid-cols-3 gap-2">
+          {playableMaps(DEV).map((m) => (
             <button
               key={m.id}
               onClick={() => setMap(m.id)}
-              className={`rounded-md border px-3 py-2 text-left transition ${
+              title={m.blurb}
+              className={`flex aspect-[3/2] items-center justify-center rounded-md border px-1.5 text-center text-[11px] font-medium leading-tight transition ${
                 map === m.id
                   ? "border-neutral-300 bg-neutral-800 text-neutral-100"
                   : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
               }`}
             >
-              <div className="text-xs font-medium">{m.name}</div>
-              <div className="mt-0.5 text-[10px] leading-snug text-neutral-500">
-                {m.blurb}
-              </div>
+              {m.name}
             </button>
           ))}
         </div>

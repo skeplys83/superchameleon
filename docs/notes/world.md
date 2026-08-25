@@ -35,7 +35,7 @@
 
 ## A map is one `.glb`, exported from Blender
 
-There is one kind of map and one way to make one. `levels/<id>.blend` is the
+There is one kind of map and one way to make one. `levels/<id>/<id>.blend` is the
 map, `public/maps/<id>.glb` is its export, and the row in `maps.ts` is a display
 name and the handful of numbers the game needs before the file has loaded.
 
@@ -421,7 +421,7 @@ downloading in the background cannot raise it.
 16. **Nine arena pieces are in exact `PAINT` hexes.** Same values the swatch row
     renders. Pick the matching swatch, paint yourself, and you can test camouflage
     against a true match instead of eyeballing it. They are now materials in
-    `levels/arena.blend`, one per colour, written as linear from the sRGB hex so
+    `levels/arena/arena.blend`, one per colour, written as linear from the sRGB hex so
     the export round-trips. Do not "tidy" an arena colour to something
     off-palette, and do not let Blender's colour picker talk you into a near miss.
 17. **Every collider in both maps has a visible counterpart, and nothing is

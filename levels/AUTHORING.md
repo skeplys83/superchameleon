@@ -16,14 +16,31 @@ appears it is an illustration from a real level, not a rule.
 ## 1. The pipeline
 
 ```
-levels/<id>.blend     the map. The only real source.
+levels/<id>/<id>.blend   the map. The only real source.
       | scripts/export-level.sh <id>      (one `blender --background` call)
       v
-public/maps/<id>.glb  the committed artefact. The game loads only this.
+public/maps/<id>.glb     the committed artefact. The game loads only this.
       | scripts/optimize-level.mjs        (dedup, in place)
       v
       the browser
 ```
+
+**One folder per level, named after it**, holding the `.blend` and everything it
+references — `textures/`, the raw kit, the bake stamps. That is the only shape
+the export looks for, and there are three reasons for it: image paths stay
+relative so a level opens on any checkout, `bake-material.py` writes beside the
+`.blend` it was given, and one map's assets can never be mistaken for another's.
+
+**Nothing of a level may live under `public/`.** That directory is copied
+verbatim into `dist/`, so a `.blend` parked there ships to every player — 140 MB
+of it, in the case that prompted this line.
+
+**Kit textures are usually far too big for a browser.** The hospital's arrived as
+33 maps at 2K and 4K and exported to a **96 MB** `.glb`, twenty times the whole
+dungeon. Resized to 512 and re-encoded as JPEG they came to 0.9 MB on disk and
+the map to **4.6 MB**, with no visible difference at play distance. The originals
+stay in the folder; the `.blend` points at the small copies. Check an export's
+size against the other levels before assuming it is done.
 
 There is **no build step between the two** in the sense that nothing generates
 the level. The `.glb` is committed. The exporter is a convenience wrapper so the
@@ -55,7 +72,7 @@ Dirt Ground node group      tuned in Blender, sliders for every layer,
       |                     driven by world position — no tiling, no seams
       |   scripts/export-level.sh ─┐    (bakes, then exports: ~0.8s + ~1.7s)
       v                            |
-levels/textures/dirt_ground.png    |    committed, rebuilt by every export
+levels/dungeon/textures/dirt_ground.png    |    committed, rebuilt by every export
       |                            |
       v                            v
 public/maps/dungeon.glb                 one joined floor, world-projected UVs
@@ -131,7 +148,7 @@ offers to save it, so a stamp kept there quietly never arrives, which is how the
 check failed the first time it was needed. Beside the PNG it is also committed,
 so a fresh checkout is verified too, and it diffs.
 
-Note what the export writes: `levels/textures/dirt_ground.png` is a build
+Note what the export writes: `levels/dungeon/textures/dirt_ground.png` is a build
 artefact of the node graph, so an export leaves it modified in the working tree
 whenever the sliders have moved. That is the point — it keeps the committed PNG
 and the .blend telling the same story.

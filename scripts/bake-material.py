@@ -1,10 +1,10 @@
 """
 Bake a procedural material from its node graph to the texture the game ships.
 
-    blender levels/dungeon.blend --background --python scripts/bake-material.py
+    blender levels/dungeon/dungeon.blend --background --python scripts/bake-material.py
 
 or run it from Blender's text editor with the file already open — it writes
-`levels/textures/<material>.png` and leaves the material exactly as it found it.
+`levels/dungeon/textures/<material>.png` and leaves the material exactly as it found it.
 Two materials use it today: `dirt_ground` and `stone_wall`.
 
 **Why a bake at all.** The node group is the thing you tune, with a slider for

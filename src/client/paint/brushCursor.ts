@@ -8,9 +8,10 @@ import type { Brush } from "./brush";
  *
  * **It has to scale with the brush, and it used to be a flat 0.012 in UV.** The
  * body's unwrap puts roughly two figure units in one UV unit, so a dab's radius
- * in UV is about half the brush size — and at `MIN_SIZE` that is 0.0075, well
+ * in UV is about half the brush size — and at `MIN_SIZE` that is 0.004, well
  * under the old fixed step. The smallest brush therefore laid down dabs that
- * did not touch each other even at a crawl.
+ * did not touch each other even at a crawl. `MIN_STEP` below still sits under
+ * that radius, so the finest line is continuous rather than dotted.
  */
 const STEP_PER_SIZE = 0.2;
 /** A floor for it, so a tiny brush cannot ask for a dab every texel. */
@@ -31,7 +32,20 @@ const MIN_STEP = 0.0025;
  * spends up to 25 of on a miss.
  */
 const MAX_FILL = 16;
-/** Lift the ring off the skin so it does not z-fight with the body. */
+/**
+ * How far the ring is lifted off the skin, **along the line of sight**.
+ *
+ * It used to be lifted along the surface normal, and that is what put the
+ * preview off the cursor on a curve: on a face turned away from the camera the
+ * normal points sideways in screen space, so a 2 cm lift slides the ring off the
+ * point it is previewing — worst exactly where a limb rounds away, which is most
+ * of a body. Moving *toward the eye* leaves the centre on the cursor's own ray,
+ * so it stays under the pointer whatever the surface is doing.
+ *
+ * The ring draws with `depthTest: false` (`players/Player.tsx`), so this is not
+ * holding off z-fighting; it only keeps the quad from being coincident with the
+ * skin it is oriented against.
+ */
 const RING_OFFSET = 0.02;
 /**
  * How far outside the body a press or a drag still counts, in screen pixels.
@@ -51,6 +65,7 @@ const EDGE_DIRS = 8;
 
 const pointerNdc = new THREE.Vector2();
 const facing = new THREE.Vector3();
+const toEye = new THREE.Vector3();
 
 export type BrushCursor = ReturnType<typeof createBrushCursor>;
 
@@ -149,8 +164,11 @@ export function createBrushCursor({
     }
 
     // The normal is already in world space — it is built from posed vertices.
+    // It still decides which way the ring *faces*; only the lift is along the
+    // view ray, so the centre stays on the pixel the cursor is over.
     mesh.visible = true;
-    mesh.position.copy(found.point).addScaledVector(found.normal, RING_OFFSET);
+    toEye.copy(camera.position).sub(found.point).normalize();
+    mesh.position.copy(found.point).addScaledVector(toEye, RING_OFFSET);
     mesh.lookAt(facing.copy(mesh.position).add(found.normal));
   }
 

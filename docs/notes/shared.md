@@ -71,7 +71,7 @@ halves of the app disagreed about them.
   this range and it becomes that room's `maxClients`. The create panel builds its
   stepper from the same two numbers, which is why they live here.
 - `world/maps.ts` gives the arena a `bound` of `ROOM_HALF`, and
-  `levels/arena.blend` is built to the same 40×40 by hand.
+  `levels/arena/arena.blend` is built to the same 40×40 by hand.
 - `server/messages.ts` clamps movement to `mapLimit(room.state.map)` — per map,
   not to `ROOM_LIMIT` — and pose indices to `POSE_COUNT`.
 - `figure/poses.ts` **throws at import time** if `POSES.length !== POSE_COUNT`,

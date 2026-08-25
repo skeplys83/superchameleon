@@ -31,7 +31,17 @@ const ZOOM_MIN = 1.2;
 const ZOOM_MAX = 14;
 const ZOOM_STEP = 0.0022; // per wheel pixel
 const MOUSE_SENSITIVITY = 0.0022;
-const PITCH_MIN = -1.0;
+/**
+ * How far down the view may tip — effectively straight down, so a chameleon can
+ * look at the spot it is lying in from directly above.
+ *
+ * **Not exactly -PI/2.** `camera.lookAt` builds its orientation against a world
+ * up of (0, 1, 0), and a view direction parallel to that has no defined roll —
+ * straight down makes the third-person camera spin on its own axis. The 0.02
+ * guard is the smallest angle that keeps it stable, and is a fifth of a degree
+ * off vertical.
+ */
+const PITCH_MIN = -Math.PI / 2 + 0.02;
 const PITCH_MAX = 0.9;
 const PAINT_FLUSH_MS = 100;
 /** How much of the brush range one pixel of right-drag covers. The full range

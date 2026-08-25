@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { sendMap, sendStart } from "@/client/net";
-import { MATCH_MAP_LIST, mapName } from "@/shared/maps";
+import { playableMaps, mapName } from "@/shared/maps";
+import { DEV } from "@/client/app/dev";
 import { MIN_PLAYERS, type Phase } from "@/shared/protocol";
 import { generateInviteLink } from "@/client/app/crazygames";
 
@@ -120,20 +121,24 @@ export function LobbyPanel({
 
       {isHost ? (
         <>
-          <div className="mt-3 mb-1 text-[10px] uppercase tracking-widest text-neutral-500">
-            Map
+          <div className="mt-3 mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-widest text-neutral-500">
+            <span>Map</span>
+            {counting && <span className="text-neutral-600">locked in</span>}
           </div>
+          {/* Locked once the countdown runs: everybody is already preloading
+              this map, and the server refuses the change anyway. */}
           <div className="flex flex-wrap gap-1.5">
-            {MATCH_MAP_LIST.map((m) => (
+            {playableMaps(DEV).map((m) => (
               <button
                 key={m.id}
+                disabled={counting}
                 onClick={() => sendMap(m.id)}
-                title={m.blurb}
-                className={`rounded-md border px-2.5 py-1 text-xs transition ${
+                title={counting ? "The map is settled once the countdown starts" : m.blurb}
+                className={`rounded-md border px-2.5 py-1 text-xs transition disabled:cursor-not-allowed ${
                   nextMap === m.id
                     ? "border-neutral-300 bg-neutral-800 text-neutral-100"
-                    : "border-neutral-700 text-neutral-400 hover:border-neutral-500"
-                }`}
+                    : "border-neutral-700 text-neutral-400 hover:border-neutral-500 disabled:hover:border-neutral-700"
+                } ${counting && nextMap !== m.id ? "opacity-30" : ""}`}
               >
                 {m.name}
               </button>

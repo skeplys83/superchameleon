@@ -191,7 +191,7 @@ from `skin.ts`; `Brush` / `DEFAULT_BRUSH` from
 - `net/` calls `paint`, `clearSkin` and `forgetSkin` for remote players.
 - **Nine arena pieces are painted in exact `PAINT` hexes, so a preset is a true
   match for something you can lie against** — camouflage is not testable
-  otherwise. Those colours now live in `levels/arena.blend` as one material per
+  otherwise. Those colours now live in `levels/arena/arena.blend` as one material per
   hex rather than in a table that imported this file, so **nothing enforces the
   match any more**: changing a preset here silently stops it matching the room.
   Never "tidy" a preset without opening the .blend. See `world/CLAUDE.md`,
