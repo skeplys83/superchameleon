@@ -205,6 +205,27 @@ It raycasts `shell` only — floor, walls, ceiling — never the furniture. See
   `figure/` draws a pose that lies flat, and which way round its box sits — so
   it is React state here, not a frame-loop local, because the collider is keyed
   on that box.
+- **A hunter is a cylinder; a chameleon is a box.** `Player.tsx` picks the
+  collider by role. A box turns with the body, so how close it lets you stand to
+  a wall depends on which way you face — a corner reaches out by root two — and
+  a hunter's collider is now sized to *hold them off* what they are searching,
+  where an eye at ten centimetres beats any camouflage. The standoff has to be
+  equal in every direction. It also removes the diagonal: at `HUNTER` 0.78 the
+  body is 1.44 across against the hospital's narrowest 1.49 m doorway, and the
+  box it replaced was 1.82 corner to corner — wider than the door it was walking
+  through. **Raising `HUNTER` means widening doorways first**; past the opening a
+  kinematic body does not squeeze, it stops. A chameleon keeps the cuboid because
+  `figure/poses.ts` states every pose as a box.
+- **No input, no travel.** `setSlideEnabled` projects a blocked move along what
+  it hit, and both holds this game applies every frame are pushes *into* a
+  surface — `GROUND_STICK` down, `STICK_SPEED` into the wall being climbed. On
+  anything but a perfectly square face a fraction survives the projection as
+  sideways motion, and a body asking to stand still creeps across what it is
+  standing on. So the frame's allowed movement is clamped after the controller
+  answers: clinging with nothing held keeps only the component along the cling
+  normal, walking with nothing held keeps only gravity, and a release keeps
+  everything, because that push *is* the movement. The walk bob reads the
+  clamped numbers too, or the gun bobs while you stand still.
 - **A hunter broadcasts camera yaw, not body yaw**, so chameleons can read where
   the gun hunting them is pointed.
 ---

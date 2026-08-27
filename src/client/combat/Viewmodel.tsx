@@ -22,9 +22,16 @@ const ARM_RADIUS = 0.075;
  * character in the world reads as the whole screen lurching.
  */
 /**
- * Recoil is a spring, not a keyframe. The gun is thrown **straight back along
- * the barrel** — no pitch: a shotgun into the shoulder shoves, and tipping the
- * viewmodel up rotates the whole thing through the crosshair it is aimed at.
+ * Recoil is a spring, not a keyframe. The gun is thrown **back along the barrel
+ * and the muzzle pitches up** — a shotgun into the shoulder shoves, and the
+ * barrel climbs.
+ *
+ * **The pitch cannot move the shot, and this is why it is safe.** `shoot.ts`
+ * casts from the *camera* through the centre of the screen and never reads this
+ * group, so the barrel swinging off the crosshair is something you see rather
+ * than something you fire. It is kept small anyway: past a few degrees the gun
+ * stops looking like it is pointing where the crosshair says it is, which is a
+ * lie about the aim even when the aim is honest.
  *
  * A spring is also what makes it smooth. Setting the offset outright and
  * decaying it snaps to full throw in a single frame, which reads as a glitch at
@@ -36,6 +43,17 @@ const RECOIL_DAMPING = 2 * Math.sqrt(RECOIL_STIFFNESS);
 /** Velocity added by one shot. Peaks around 0.2 m and is home inside 0.65s —
  *  comfortably under `FIRE_INTERVAL_MS`, so kicks cannot stack. */
 const RECOIL_IMPULSE = 7;
+/**
+ * Muzzle climb: radians of upward pitch per metre of throw, so ~5° at the peak.
+ *
+ * Driven off the same spring as the shove, so the climb and the return cannot
+ * drift out of step — a second spring would be two sets of numbers to keep in
+ * agreement for what is one impulse. The pivot is the rig's origin, which sits
+ * at the eye, so the gun swings up and a touch further out as it tips; the
+ * muzzle therefore travels further than the breech, which is the shape of a
+ * real kick. Raise it for a wilder climb.
+ */
+const RECOIL_PITCH = 0.4;
 /**
  * The spring is integrated in fixed sub-steps, not over the frame's own delta.
  *
@@ -92,7 +110,8 @@ export function Viewmodel() {
    *  can copy the camera exactly and this one can be nudged about. */
   const rig = useRef<THREE.Group>(null);
   /** How far back the recoil spring is holding the gun, and how fast it is
-   *  moving. Metres and metres per second. */
+   *  moving. Metres and metres per second. The muzzle climb is a multiple of the
+   *  same number rather than a state of its own — see `RECOIL_PITCH`. */
   const recoil = useRef(0);
   const recoilVel = useRef(0);
   /** Distance walked, in radians of stride. */
@@ -154,6 +173,9 @@ export function Viewmodel() {
       Math.sin(stride.current * 2) * BOB_Y * swing.current,
       recoil.current,
     );
+    // +x pitches the muzzle up: it carries the forward axis towards +y. Nothing
+    // else writes this rotation, so it can be set outright rather than composed.
+    r.rotation.x = recoil.current * RECOIL_PITCH;
   }, 1);
 
   return (

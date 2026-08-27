@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { characterGeometry } from "@/client/figure/model";
-import { buildSurface, dab, type Surface } from "./surface";
+import { buildSurface, dab, settleGutter, type Surface } from "./surface";
 import { MAX_STROKES } from "@/shared/protocol";
 
 /** Per-player paint. One canvas per body: the body is a single skinned mesh
@@ -94,11 +94,49 @@ export function paint(id: string, stroke: Stroke) {
   log.push(stroke);
   if (log.length > MAX_STROKES) log.splice(0, log.length - MAX_STROKES);
   history.set(id, log);
+
+  settleSoon(id);
+}
+
+/** How long after the last dab the gutter is repainted. Long enough that a
+ *  drag pays for it once rather than per dab, short enough to be over before
+ *  anyone looks at the result. */
+const SETTLE_MS = 200;
+const settling = new Map<string, ReturnType<typeof setTimeout>>();
+
+/**
+ * Repaint the far gutter once the brush stops moving — the deep-mip fix, see
+ * `settleGutter` in `surface.ts`.
+ *
+ * **Debounced, and it walks the whole atlas**, which is why it does not live in
+ * `paint`: a drag is hundreds of dabs a second and this is a megapixel pass.
+ * Nothing depends on it having run — it changes only what the far mips average
+ * to, so a frame drawn before it lands is the old halo for another fifth of a
+ * second.
+ */
+function settleSoon(id: string) {
+  clearTimeout(settling.get(id));
+  settling.set(
+    id,
+    setTimeout(() => {
+      settling.delete(id);
+      const entry = painted.get(id);
+      const s = getSurface();
+      if (!entry || !s) return;
+      if (!settleGutter(s, entry.image)) return;
+      entry.ctx.putImageData(entry.image, 0, 0);
+      entry.texture.needsUpdate = true;
+    }, SETTLE_MS),
+  );
 }
 
 export function clearSkin(id: string) {
   const entry = painted.get(id);
   if (!entry) return;
+  // A settle still pending would repaint the gutter from the body it no longer
+  // has, a fifth of a second after the wipe.
+  clearTimeout(settling.get(id));
+  settling.delete(id);
   entry.ctx.fillStyle = "#ffffff";
   entry.ctx.fillRect(0, 0, TEXTURE_SIZE, TEXTURE_SIZE);
   entry.image = entry.ctx.getImageData(0, 0, TEXTURE_SIZE, TEXTURE_SIZE);

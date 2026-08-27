@@ -49,6 +49,16 @@ let go, because a reservation is held for only fifteen seconds.
   machine is how this game gets tested; shared storage makes both the same
   player and both the host.
 - **A move drops every skin, yours included** — session ids are per room.
+- **Message names come from `MESSAGES` in `shared/protocol.ts`**, never a string
+  literal: `send.ts` destructures `toServer`, `client.ts` destructures
+  `toClient`. A literal on one side of the wire and a rename on the other is a
+  handler that silently never fires, which is not something a type checker could
+  see before the table existed.
+- **`onMessage` is called in `client.ts` and nowhere else in the app.** A handler
+  turns a frame into an `emit*` from `events.ts`, and the rest of the client
+  subscribes to that — which is why `combat/` and `sound/` never mention the
+  wire. A new message means a handler here *and* an emitter there, not an import
+  of this folder from a Canvas component.
 - **`cling` on the wire is a surface, not a flag** (`CLING_*` in `shared/`).
   `sound/` still reads it as truthy-means-climbing; `figure/` reads *which*
   surface, to decide which way up to draw a pose that lies flat. It rides in the

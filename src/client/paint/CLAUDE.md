@@ -184,6 +184,17 @@ one number and grows the schema.
   rebuilt under it; captured references go stale mid-drag.
 - **Reads real limb sizes from `figure/parts.ts`**; `figure/` reads the canvases
   back. Known, acyclic.
+- **Padding the gutter is two jobs, and `PAD_TEXELS` only does the first.** The
+  flood out of each dab covers bilinear and a mip level or two, which is what
+  keeps a white hairline off the seams. It cannot reach the depth a *hunter*
+  samples: at `HUNT_DPR` the figure is about sixty pixels tall against a 1024
+  atlas, so the GPU reads mip four, where one texel averages sixteen by sixteen
+  and the white gutter is most of what is in it — a body painted black came back
+  ringed in white speckle, the one artefact a blur cannot destroy. `settleGutter`
+  fills everything past the pad with the average of what is on the body, so the
+  deep mips fade a figure into itself. **It walks the whole atlas**, so `skin.ts`
+  runs it debounced after the brush stops rather than per dab, and nothing
+  depends on it having run.
 - **`MAX_STROKES`, `MAX_STROKE_LENGTH` and `MAX_STROKE_BATCH` are in
   `shared/protocol.ts`** — the server clamps against the same numbers.
 

@@ -30,8 +30,8 @@ export function GltfLevel({ level }: { level: GameMap }) {
   // exist by the time `players/Player.tsx` collects them — see invariant 9.
   const prepared = useMemo(
     () =>
-      prepareLevel(scene, { lights: level.render.lights }),
-    [scene, level.render.lights],
+      prepareLevel(scene, { lights: level.render.lights, matte: level.render.matte }),
+    [scene, level.render.lights, level.render.matte],
   );
 
   // The one thing the deleted build step used to guarantee. See `checkLevel`.

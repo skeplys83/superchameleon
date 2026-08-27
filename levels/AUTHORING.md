@@ -48,7 +48,7 @@ export settings live in one place rather than in somebody's memory; exporting by
 hand is fine (glTF Binary, +Y up, apply modifiers, include punctual lights, and
 limit to visible objects).
 
-**The exporter defends against the two ways an export goes silently wrong:**
+**The exporter defends against the three ways an export goes silently wrong:**
 
 - **A hidden collection does not export.** Collision is the collection everyone
   hides, because it sits on top of the map you are trying to look at. A level
@@ -57,6 +57,15 @@ limit to visible objects).
   for the duration and restores it after.
 - **The asset palette must *not* export.** It is excluded from the view layer for
   the duration instead, without saving the `.blend`.
+- **A piece placed in the map but left in the palette goes out with the palette.**
+  Dropping a kit model into the level and forgetting to move it out of `kit` is
+  one keystroke, and the map simply comes back without it — that is how the
+  hospital's nine door leaves and four doorway walls went missing. The exporter
+  measures the footprint of everything it is about to *draw* — colliders
+  excluded, since one built on a palette piece and left there would stretch that
+  footprint over the palette — and names every kit model standing inside it.
+  A warning, not a fix: only the `.blend` can say which collection a piece
+  belongs to.
 
 It also refuses to write a file with no collision objects at all, and warns when
 a level suddenly exports at more than twice its previous size — which is what a

@@ -127,6 +127,24 @@ mechanism and the prose that explains it; the component is now composition.
   which frames have a framebuffer worth reading — see `paint/CLAUDE.md`.
 - **`Scene.tsx` passes the phase down as three separate facts** — `reveal`,
   `hunting`, `frozen` — because each is read by a different part of the tree.
+- **The hunter hunts through a coarser picture, and it is two Canvas props.**
+  `blinded` is `role === "hunter" && hunting`; it drops `dpr` to `HUNT_DPR` and
+  `HUNT_UPSCALE` decides how that frame is stretched back up — `auto` for the
+  soft blur it uses now, `pixelated` for a crunchy one. **Gated on the phase as
+  much as on the role** — everyone in a lobby is nominally a hunter, so the role
+  alone would blur the waiting room.
+- **That blur is live, not a startup setting.** It is two plain props rather
+  than an effect because r3f re-applies `dpr` on every render of the Canvas and
+  a store subscription turns that into `setPixelRatio` + `setSize` on the spot —
+  so it comes on at the bell and lifts at the reveal with no remount and no lost
+  GL context. Doing it with `setDpr` from an effect would mean owning the
+  restore too, and the React Compiler's lint refuses the `gl.domElement` write
+  that the nearest-neighbour half would need.
+- **What the blur reaches is exactly what is inside the Canvas.** `hud/` renders
+  outside it, so no menu, banner or player list can be caught by this even by
+  accident, and the crosshair is the CSS cursor. The shotgun viewmodel *is*
+  in-canvas and is left in deliberately: a sharp gun held against a soft world
+  is what would look broken.
 - **`leave` is the only exit, from either room.** There is no "back to the
   lobby" path out of a match: a player who walked out of a round is out of it.
 - **Esc closes the pause menu for a chameleon and not for a hunter.** A hunter's

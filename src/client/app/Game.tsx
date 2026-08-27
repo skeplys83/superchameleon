@@ -18,6 +18,7 @@ import { ChatPanel } from "@/client/hud/ChatPanel";
 import { HunterWait } from "@/client/hud/HunterWait";
 import { DroppedPanel } from "@/client/hud/DroppedPanel";
 import { PhaseBanner } from "@/client/hud/PhaseBanner";
+import { HuntVision } from "@/client/hud/HuntVision";
 import { RoundOverPanel } from "@/client/hud/RoundOverPanel";
 import { DebugPanel } from "@/client/hud/DebugPanel";
 import { DEV } from "@/client/app/dev";
@@ -317,6 +318,10 @@ export function Game() {
         }}
         onHoverBody={onHoverBody}
       />
+      {/* Over the world and under every panel, and on exactly the condition
+          `Scene` blurs for: everyone in a lobby is nominally a hunter, so the
+          role alone would grain the waiting room. */}
+      {role === "hunter" && room?.phase === "hunt" && <HuntVision />}
       {joined ? (
         <>
           {/* Chameleons only. A hunter walks and shoots, which no legend has

@@ -1,6 +1,7 @@
 import { Client, getStateCallbacks, type Room } from "colyseus.js";
 import {
   CHAT_HISTORY,
+  MESSAGES,
   LEAVE_IN_PROGRESS,
   LEAVE_STARTING,
   type Phase,
@@ -27,6 +28,8 @@ import {
   type RoomInfo,
 } from "./events";
 import { getAdvertisedGamePort } from "./sessions";
+
+const { toClient } = MESSAGES;
 
 /** Ever-increasing, across rooms: a chat line's id is only ever a React key,
  *  and one that is never re-used cannot collide with a line still on screen. */
@@ -218,7 +221,7 @@ async function attach(joined: Room): Promise<RoomInfo> {
 
   // Paint from everyone else. The server does not echo a player their own
   // strokes — those were already drawn locally as the brush moved.
-  joined.onMessage("paint", (msg: { id: string; strokes: string[] }) => {
+  joined.onMessage(toClient.paint, (msg: { id: string; strokes: string[] }) => {
     if (!msg?.id || !Array.isArray(msg.strokes)) return;
     for (const raw of msg.strokes) {
       const stroke = decodeStroke(raw);
@@ -249,7 +252,7 @@ async function attach(joined: Room): Promise<RoomInfo> {
   // because that is the shape the panel already takes and a whole list has no
   // ordering to reconcile.
   let lines: ChatMessage[] = [];
-  joined.onMessage("chat", (msg: { name?: string; text?: string }) => {
+  joined.onMessage(toClient.chat, (msg: { name?: string; text?: string }) => {
     if (typeof msg?.text !== "string" || !msg.text) return;
     lines = [
       ...lines,
@@ -264,36 +267,36 @@ async function attach(joined: Room): Promise<RoomInfo> {
     emitChat(lines);
   });
 
-  joined.onMessage("shot", (msg: { id: string }) => {
+  joined.onMessage(toClient.shot, (msg: { id: string }) => {
     if (msg?.id) emitShot(msg.id);
   });
 
-  joined.onMessage("whistle", (msg: { id: string }) => {
+  joined.onMessage(toClient.whistle, (msg: { id: string }) => {
     if (msg?.id) emitWhistle(msg.id);
   });
 
   joined.onMessage(
-    "caught",
+    toClient.caught,
     (msg: { id: string; by: string; position?: [number, number, number] }) => {
       if (!msg?.id) return;
       emitCaught(msg.id, msg.by ?? "a hunter", msg.position);
     },
   );
 
-  joined.onMessage("clearSkin", (msg: { id: string }) => {
+  joined.onMessage(toClient.clearSkin, (msg: { id: string }) => {
     if (msg?.id) clearSkin(msg.id);
   });
 
-  joined.onMessage("mark", (mark: NetMark) => {
+  joined.onMessage(toClient.mark, (mark: NetMark) => {
     emitMark(mark);
   });
 
   // The lobby has opened a match and is holding a seat in it for us.
-  joined.onMessage("moveTo", (seat: Seat) => {
+  joined.onMessage(toClient.moveTo, (seat: Seat) => {
     void move(joined, seat);
   });
 
-  joined.onMessage("moveFailed", (msg: { reason?: string }) => {
+  joined.onMessage(toClient.moveFailed, (msg: { reason?: string }) => {
     emitMoveFailed(msg?.reason ?? "the match could not be reached");
   });
 

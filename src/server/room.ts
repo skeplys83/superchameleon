@@ -13,6 +13,7 @@ import { HostRule } from "./host.ts";
 import { clamp, registerMessages } from "./messages.ts";
 import { setSessionName } from "./session.ts";
 import {
+  MESSAGES,
   COUNTDOWN_SECONDS,
   HIDE_SECONDS,
   LEAVE_IN_PROGRESS,
@@ -195,7 +196,7 @@ export class GameRoom extends Room<GameState> {
 
     // Only a host may start, and only a lobby has anything to start. Pressing it
     // does not open a match — it starts the countdown, which does.
-    this.onMessage("start", (client: Client) => {
+    this.onMessage(MESSAGES.toServer.start, (client: Client) => {
       if (!this.isLobby || client.sessionId !== this.state.hostId) return;
       this.beginCountdown();
     });
@@ -208,7 +209,7 @@ export class GameRoom extends Room<GameState> {
     // — so a switch at second four sends half the lobby to a map the other half
     // is not fetching. The picker greys out client-side too; this is the check
     // that actually holds.
-    this.onMessage("setMap", (client: Client, msg: { map?: unknown }) => {
+    this.onMessage(MESSAGES.toServer.setMap, (client: Client, msg: { map?: unknown }) => {
       if (!this.isLobby || client.sessionId !== this.state.hostId) return;
       if (this.starting || this.state.phase !== "waiting") return;
       const map = String(msg?.map ?? "");
@@ -311,7 +312,7 @@ export class GameRoom extends Room<GameState> {
       }, 1000);
       this.publish();
     } catch (e) {
-      this.broadcast("moveFailed", {
+      this.broadcast(MESSAGES.toClient.moveFailed, {
         reason: e instanceof Error ? e.message : "could not open the match",
       });
     } finally {
@@ -436,7 +437,7 @@ export class GameRoom extends Room<GameState> {
     if (!lobby) {
       // The lobby outlived its match by design, so this is the odd case: the
       // whole group left and the sweep closed it. Nothing to go back to.
-      this.broadcast("moveFailed", { reason: "the waiting room is gone" });
+      this.broadcast(MESSAGES.toClient.moveFailed, { reason: "the waiting room is gone" });
       return;
     }
 
@@ -460,7 +461,7 @@ export class GameRoom extends Room<GameState> {
   private async handOver(client: Client, to: RoomCache, options: Record<string, string>) {
     try {
       const seat = await matchMaker.reserveSeatFor(to, options);
-      client.send("moveTo", {
+      client.send(MESSAGES.toClient.moveTo, {
         sessionId: seat.sessionId,
         room: {
           roomId: to.roomId,
@@ -471,7 +472,7 @@ export class GameRoom extends Room<GameState> {
         },
       });
     } catch (e) {
-      client.send("moveFailed", { reason: e instanceof Error ? e.message : "no seat" });
+      client.send(MESSAGES.toClient.moveFailed, { reason: e instanceof Error ? e.message : "no seat" });
     }
   }
 

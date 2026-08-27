@@ -8,6 +8,74 @@ export type Role = "chameleon" | "hunter";
 /** What a room is doing right now, as opposed to which kind of room it is. */
 export type Phase = "waiting" | "countdown" | "hiding" | "hunt" | "reveal";
 
+/**
+ * Every message name that crosses the wire, in one table.
+ *
+ * The names used to be bare string literals at both ends — `send("shoot")` in
+ * `client/net/send.ts` and `onMessage("shoot")` in `server/messages.ts`, with
+ * nothing between them. A rename on one side left the other sending into a room
+ * with no handler: no type error, no failing test, just a feature that quietly
+ * stopped happening. Everything else in the protocol lives here, so these do
+ * too, and both ends now break at compile time instead.
+ *
+ * **Split by direction, because four names appear in both.** `paint`, `chat`,
+ * `whistle` and `clearSkin` travel each way with different payloads — upstream
+ * they are a request from one player, downstream they are the room telling
+ * everybody what happened. Colyseus keeps the two directions in separate
+ * namespaces, so this is a real distinction and not a naming accident.
+ */
+export const MESSAGES = {
+  /** client → server. What a player may ask for. */
+  toServer: {
+    /** Position, look, pose and cling, every frame. */
+    state: "state",
+    /** A batch of encoded brush strokes. */
+    paint: "paint",
+    /** Wipe my own skin back to white. */
+    clearSkin: "clearSkin",
+    /** I hit somebody. Honoured only from a hunter, in a match, during `hunt`. */
+    kill: "kill",
+    /** I pulled the trigger — relayed as `shot` plus a `mark`. */
+    shoot: "shoot",
+    /** I whistled. Chameleons only. */
+    whistle: "whistle",
+    /** Say something. Lobby only, and only before a round is underway. */
+    chat: "chat",
+    /** Begin the countdown. Host only. */
+    start: "start",
+    /** Choose the map the next round runs on. Host only. */
+    setMap: "setMap",
+  },
+  /** server → client. What the room tells you. */
+  toClient: {
+    /** Somebody else's strokes. Never echoed to the painter. */
+    paint: "paint",
+    /** Somebody's skin went back to white. */
+    clearSkin: "clearSkin",
+    /** A gun went off, at this player. Separate from `mark`: the bang comes
+     *  from the gun and the hole is over at the wall. */
+    shot: "shot",
+    /** Where the pellets landed. Cosmetic, expires client-side, never stored. */
+    mark: "mark",
+    /** A chameleon was caught and is a hunter now. */
+    caught: "caught",
+    /** Somebody whistled, at this player. */
+    whistle: "whistle",
+    /** One line of lobby chat. Sent to the speaker too. */
+    chat: "chat",
+    /** A seat is held for you in another room; go there. */
+    moveTo: "moveTo",
+    /** It could not be held, and here is why. */
+    moveFailed: "moveFailed",
+  },
+} as const;
+
+/** What a client may send. */
+export type ClientMessage = keyof typeof MESSAGES.toServer;
+
+/** What a client may receive. */
+export type ServerMessage = keyof typeof MESSAGES.toClient;
+
 /** Half-extent of the arena interior. `world/Room.tsx` builds the shell from it. */
 export const ROOM_HALF = 20;
 

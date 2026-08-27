@@ -44,6 +44,10 @@ export type Surface = {
 type Pad = {
   size: number;
   covered: Uint8Array;
+  /** Uncovered, but within `PAD_TEXELS` of something covered — the strip each
+   *  dab floods into. Held apart from the far gutter so `settleGutter` can fill
+   *  the rest without erasing it. */
+  near: Uint8Array;
 };
 
 /** How far paint is pushed into the gutter. Enough for bilinear and the first
@@ -240,8 +244,85 @@ function coverage(s: Surface, size: number): Pad {
     }
   }
 
-  s.pad = { size, covered };
+  // The strip a dab is allowed to flood into, found once: every uncovered texel
+  // within `PAD_TEXELS` of the body. `settleGutter` fills what is left over.
+  const near = new Uint8Array(size * size);
+  let frontier: number[] = [];
+  for (let i = 0; i < covered.length; i++) if (covered[i]) frontier.push(i);
+  for (let step = 0; step < PAD_TEXELS && frontier.length; step++) {
+    const next: number[] = [];
+    for (const i of frontier) {
+      const x = i % size;
+      const y = (i / size) | 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
+          const n = ny * size + nx;
+          if (covered[n] || near[n]) continue;
+          near[n] = 1;
+          next.push(n);
+        }
+      }
+    }
+    frontier = next;
+  }
+
+  s.pad = { size, covered, near };
   return s.pad;
+}
+
+/**
+ * Paint the *far* gutter — everything the dab flood never reaches — the average
+ * of what is on the body.
+ *
+ * **Padding alone cannot fix a mipmapped atlas.** The flood in `dab` reaches
+ * `PAD_TEXELS`, which covers bilinear and the first couple of mip levels. A
+ * hunter sees the world at `HUNT_DPR`, where the figure is about sixty pixels
+ * tall against a 1024 atlas — mip four, where one texel is an average of
+ * sixteen by sixteen. At that depth the gutter is most of what is being
+ * averaged, and since a blank canvas is white, a body painted black comes back
+ * ringed in white speckle: the one artefact that survives the blur the hunt is
+ * built on.
+ *
+ * So the far gutter is made to converge on the body's own colour instead of on
+ * white. Deep mips then fade the figure into itself rather than into a halo.
+ *
+ * Costly enough to be worth doing on a debounce rather than per dab — see
+ * `skin.ts`. Returns false when there is nothing painted to average.
+ */
+export function settleGutter(s: Surface, image: ImageData): boolean {
+  const size = image.width;
+  const pad = coverage(s, size);
+  const data = image.data;
+
+  let r = 0;
+  let g = 0;
+  let b = 0;
+  let n = 0;
+  for (let i = 0; i < pad.covered.length; i++) {
+    if (!pad.covered[i]) continue;
+    const p = i * 4;
+    r += data[p];
+    g += data[p + 1];
+    b += data[p + 2];
+    n += 1;
+  }
+  if (!n) return false;
+  const ar = (r / n) | 0;
+  const ag = (g / n) | 0;
+  const ab = (b / n) | 0;
+
+  for (let i = 0; i < pad.covered.length; i++) {
+    if (pad.covered[i] || pad.near[i]) continue;
+    const p = i * 4;
+    data[p] = ar;
+    data[p + 1] = ag;
+    data[p + 2] = ab;
+    data[p + 3] = 255;
+  }
+  return true;
 }
 
 /**

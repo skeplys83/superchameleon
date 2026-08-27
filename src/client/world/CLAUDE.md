@@ -63,6 +63,13 @@ collision, everything else decoration — and the full Blender workflow are in
   sampled from both files. **The judgement call is `col_ring_deck`**: it is
   walkable but not named like shell, so a player standing on it can drop the
   lens through it. Add `deck` to the pattern if that reads worse.
+- **`matte` in a map's render config flattens every material it loads** — rough
+  1, no metalness, and the MR maps dropped with them, because glTF's default
+  metallic factor is 1 and a kit that ships an MR texture is trusting it
+  completely. A glossy surface has no one colour for a chameleon to match, so
+  this is a hiding rule before it is a look. It mutates the materials the cached
+  glTF owns rather than cloning: every mount of a map wants the same answer, and
+  the operation is idempotent.
 - **Developer mode draws it green** (`DEV` in `app/dev.ts`, plus `<Physics
   debug>` in `Scene.tsx`), which is exactly what you want while hunting for a
   hole in a map and exactly what you do not want the rest of the time.

@@ -3,6 +3,7 @@ import type { Client } from "colyseus";
 import type { GameRoom } from "./room.ts";
 import { cleanChat } from "./clean.ts";
 import {
+  MESSAGES,
   CHAT_INTERVAL_MS,
   MAX_CHAT_LENGTH,
   FIRE_INTERVAL_MS,
@@ -18,9 +19,39 @@ import {
 } from "../shared/protocol.ts";
 import { mapLimit } from "../shared/maps.ts";
 
+const { toServer, toClient } = MESSAGES;
+
 /** Anything non-finite off the wire becomes 0 rather than poisoning the state. */
 export const clamp = (n: number, lo: number, hi: number) =>
   Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : 0;
+
+/** A full turn, the widest a Euler angle off the wire is allowed to be. */
+const TAU = Math.PI * 2;
+
+/**
+ * Three finite numbers, or null. `clamp` alone is not enough for a vector: it
+ * turns a NaN into a 0, so an all-NaN position becomes the middle of the map
+ * rather than being recognised as junk and refused.
+ */
+const vec3 = (raw: unknown): [number, number, number] | null => {
+  if (!Array.isArray(raw) || raw.length !== 3) return null;
+  const [x, y, z] = raw as unknown[];
+  if (![x, y, z].every((n) => typeof n === "number" && Number.isFinite(n))) return null;
+  return [x as number, y as number, z as number];
+};
+
+/** A point in the map, bounded the same way a player's own position is. */
+const point = (raw: unknown, limit: number): [number, number, number] | null => {
+  const v = vec3(raw);
+  return v && [clamp(v[0], -limit, limit), clamp(v[1], -5, 30), clamp(v[2], -limit, limit)];
+};
+
+/** A rotation off the wire. Bounded so a mark cannot be handed an angle no
+ *  renderer expects; the wrap itself is the client's business. */
+const angles = (raw: unknown): [number, number, number] | null => {
+  const v = vec3(raw);
+  return v && [clamp(v[0], -TAU, TAU), clamp(v[1], -TAU, TAU), clamp(v[2], -TAU, TAU)];
+};
 
 const MIN_FIRE_GAP_MS = FIRE_INTERVAL_MS * FIRE_INTERVAL_TOLERANCE;
 const MIN_WHISTLE_GAP_MS = WHISTLE_INTERVAL_MS * WHISTLE_TOLERANCE;
@@ -32,11 +63,7 @@ type ChatMsg = { text?: unknown };
 type StateMsg = { p?: unknown; yaw?: unknown; pitch?: unknown; pose?: unknown; cling?: unknown };
 type PaintMsg = { strokes?: unknown };
 type KillMsg = { id?: unknown; position?: unknown };
-type ShootMsg = {
-  position: [number, number, number];
-  rotation: [number, number, number];
-  origin: [number, number, number];
-};
+type ShootMsg = { position?: unknown; rotation?: unknown; origin?: unknown };
 
 /** Wire up one room's message handlers. */
 export function registerMessages(room: GameRoom) {
@@ -59,7 +86,7 @@ export function registerMessages(room: GameRoom) {
     lastChat.delete(sessionId);
   };
 
-  room.onMessage("state", (client: Client, msg: StateMsg) => {
+  room.onMessage(toServer.state, (client: Client, msg: StateMsg) => {
     const player = room.state.players.get(client.sessionId);
     if (!player || !msg) return;
     const [x, y, z] = Array.isArray(msg.p) ? (msg.p as number[]) : [0, 0, 0];
@@ -84,7 +111,7 @@ export function registerMessages(room: GameRoom) {
 
   // Paint is cosmetic and self-applied: it is stored on the painter and
   // relayed to everyone else, who already have the same brush code.
-  room.onMessage("paint", (client: Client, msg: PaintMsg) => {
+  room.onMessage(toServer.paint, (client: Client, msg: PaintMsg) => {
     const player = room.state.players.get(client.sessionId);
     if (!player || !Array.isArray(msg?.strokes)) return;
 
@@ -97,11 +124,11 @@ export function registerMessages(room: GameRoom) {
     const overflow = player.strokes.length - MAX_STROKES;
     if (overflow > 0) player.strokes.splice(0, overflow);
 
-    room.broadcast("paint", { id: client.sessionId, strokes }, { except: client });
+    room.broadcast(toClient.paint, { id: client.sessionId, strokes }, { except: client });
   });
 
   // A catch, called by the hunter who made it — the same trust model as movement.
-  room.onMessage("kill", (client: Client, msg: KillMsg) => {
+  room.onMessage(toServer.kill, (client: Client, msg: KillMsg) => {
     // Nobody is caught in the waiting room. Everyone there is armed — that is
     // what a lobby *is* — and being converted while queuing for a game you
     // have not started would be nonsense. The shot still bangs and still marks
@@ -127,13 +154,13 @@ export function registerMessages(room: GameRoom) {
     }
     if (!canFire(client.sessionId)) return;
 
-    const [rawX, rawY, rawZ] = Array.isArray(msg.position)
-      ? (msg.position as number[])
-      : [victim.x, victim.y, victim.z];
-    const limit = mapLimit(room.state.map);
-    const x = clamp(rawX, -limit, limit);
-    const y = clamp(rawY, -5, 30);
-    const z = clamp(rawZ, -limit, limit);
+    // Where the shooter says they found them, falling back to where the victim
+    // actually is — a clamped NaN would bury everybody in the middle of the map.
+    const [x, y, z] = point(msg.position, mapLimit(room.state.map)) ?? [
+      victim.x,
+      victim.y,
+      victim.z,
+    ];
 
     // Where somebody was found, and who. The name rides along so the reveal
     // can label the spot rather than showing anonymous markers.
@@ -149,48 +176,53 @@ export function registerMessages(room: GameRoom) {
     victim.cling = CLING_NONE;
     victim.pose = 0;
     victim.strokes.clear();
-    room.broadcast("clearSkin", { id: victimId });
+    room.broadcast(toClient.clearSkin, { id: victimId });
 
     // A catching shot is still a shot: it makes the same bang as one that hit
     // a wall, and it is the only bang for it, since this path relays no mark.
-    room.broadcast("shot", { id: client.sessionId });
-    room.broadcast("caught", { id: victimId, by: shooter.name, position: [x, y, z] });
+    room.broadcast(toClient.shot, { id: client.sessionId });
+    room.broadcast(toClient.caught, { id: victimId, by: shooter.name, position: [x, y, z] });
 
     // The last one caught ends the round then and there.
     if (room.chameleonsLeft === 0) room.finish("hunters");
   });
 
-  room.onMessage("clearSkin", (client: Client) => {
+  room.onMessage(toServer.clearSkin, (client: Client) => {
     const player = room.state.players.get(client.sessionId);
     if (!player) return;
     player.strokes.clear();
-    room.broadcast("clearSkin", { id: client.sessionId }, { except: client });
+    room.broadcast(toClient.clearSkin, { id: client.sessionId }, { except: client });
   });
 
-  // Marks are cosmetic and expire in three seconds, so they are simply relayed
+  // Marks are cosmetic and expire in three seconds, so they are bounded, relayed
   // and never stored. The bang is a separate broadcast: a mark is at the wall
   // the pellets hit, and a gunshot has to come from the gun.
-  room.onMessage("shoot", (client: Client, msg: ShootMsg) => {
-    if (!msg || !canFire(client.sessionId)) return;
-    room.broadcast("mark", {
-      id: randomUUID(),
-      position: msg.position,
-      rotation: msg.rotation,
-      origin: msg.origin,
-    });
-    room.broadcast("shot", { id: client.sessionId });
+  room.onMessage(toServer.shoot, (client: Client, msg: ShootMsg) => {
+    if (!msg) return;
+
+    // Bounded before the rate limit, so junk costs a spammer nothing and never
+    // eats a real shot's turn.
+    const limit = mapLimit(room.state.map);
+    const position = point(msg.position, limit);
+    const origin = point(msg.origin, limit);
+    const rotation = angles(msg.rotation);
+    if (!position || !origin || !rotation) return;
+
+    if (!canFire(client.sessionId)) return;
+    room.broadcast(toClient.mark, { id: randomUUID(), position, rotation, origin });
+    room.broadcast(toClient.shot, { id: client.sessionId });
   });
 
   // A whistle is only a position given away, so it is relayed like a shot:
   // everyone hears it, at whoever let it out. Chameleons only — the mirror of the
   // kill check below, which refuses anyone who is not a hunter.
-  room.onMessage("whistle", (client: Client) => {
+  room.onMessage(toServer.whistle, (client: Client) => {
     const player = room.state.players.get(client.sessionId);
     if (!player || player.role !== "chameleon") return;
     const now = Date.now();
     if (now - (lastWhistle.get(client.sessionId) ?? 0) < MIN_WHISTLE_GAP_MS) return;
     lastWhistle.set(client.sessionId, now);
-    room.broadcast("whistle", { id: client.sessionId });
+    room.broadcast(toClient.whistle, { id: client.sessionId });
   });
 
   /**
@@ -208,7 +240,7 @@ export function registerMessages(room: GameRoom) {
    * empty box. Nothing is stored, so there is no history to leak into the next
    * round either.
    */
-  room.onMessage("chat", (client: Client, msg: ChatMsg) => {
+  room.onMessage(toServer.chat, (client: Client, msg: ChatMsg) => {
     if (!room.isLobby) return;
     if (room.state.phase !== "waiting" && room.state.phase !== "countdown") return;
 
@@ -237,7 +269,7 @@ export function registerMessages(room: GameRoom) {
     // To the sender too: nobody renders their own line locally, so this is the
     // one delivery and everyone in the room sees the same list in the same
     // order.
-    room.broadcast("chat", { name: player.name, text: clean });
+    room.broadcast(toClient.chat, { name: player.name, text: clean });
   });
 
   return { forget };

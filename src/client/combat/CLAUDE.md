@@ -33,19 +33,25 @@ Two motions, both deliberately tiny — this sits a few centimetres from the eye
 where anything that would read as subtle on a figure in the world reads as the
 whole screen lurching.
 
-- **Recoil**: about 20 cm **straight back along the barrel and nothing else**,
-  home in 0.65s. No pitch: a shotgun into the shoulder shoves, and tipping the
-  viewmodel rotates the whole thing through the crosshair it is aimed at. It is
-  a critically damped spring driven by an impulse, integrated in fixed 1/240
-  sub-steps — setting the offset outright and decaying it reaches full throw in
-  one frame, which reads as a glitch, and integrating over the frame's own delta
-  made the kick depend on the frame rate (0.19 m at 144 Hz, 0.05 m at 30). The
-  decay is squared so the throw is fast and the return slow; a linear one reads
-  as the gun being *pushed* rather than kicking. Shorter than `FIRE_INTERVAL_MS`,
-  so a held trigger cannot stack kicks. It is triggered from
-  `players/usePointerControls.ts` through `recoil.ts` — a boolean read once and
-  cleared, rather than a prop threaded down from `Game.tsx`, which would put a
-  React re-render on every trigger pull.
+- **Recoil**: about 20 cm back along the barrel and **5° of muzzle climb**, both
+  peaking ~85 ms after the shot and home in 0.65s. The pitch is about the rig's
+  origin at the eye, so the gun swings up ~4.5 cm and a touch further out as it
+  tips — the muzzle travels further than the breech, which is the shape of a
+  real kick. **The pitch cannot move the shot**: `shoot.ts` casts from the
+  camera through the centre of the screen and never reads the viewmodel, so the
+  barrel leaving the crosshair is seen and not fired. It is kept to a few
+  degrees anyway, because past that the gun stops looking like it points where
+  the crosshair says. One spring drives both — `RECOIL_PITCH` is radians of
+  climb per metre of throw, so the two cannot drift out of step. It is
+  critically damped and driven by an impulse, integrated in
+  fixed 1/240 sub-steps — setting the offset outright and decaying it reaches
+  full throw in one frame, which reads as a glitch, and integrating over the
+  frame's own delta made the kick depend on the frame rate (0.19 m at 144 Hz,
+  0.05 m at 30). Shorter than `FIRE_INTERVAL_MS`, so a held trigger cannot stack
+  kicks. It is triggered from `players/usePointerControls.ts` through
+  `recoil.ts` — a boolean read once and cleared, rather than a prop threaded
+  down from `Game.tsx`, which would put a React re-render on every trigger
+  pull.
 - **Walk bob**: a figure-of-eight, 9 mm across and 7 mm up, the vertical at
   twice the stride — which is what a walk does and what a plain sine does not.
   **It runs off `players/gait.ts`, which advances under exactly the condition

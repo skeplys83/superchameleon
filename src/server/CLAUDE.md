@@ -35,7 +35,7 @@ thing that tells them apart, because movement, paint, kills and whistles are
 identical in both. The cycle is lobby → countdown → match → back to the *same*
 lobby, and `state.lobby` is the field that makes the return trip possible.
 
-## The four rules that will bite you
+## The five rules that will bite you
 
 1. **Schema fields use `declare`, never `!`.** Type stripping blanks characters
    out rather than re-emitting, so `name!: string` survives as a real class
@@ -56,7 +56,15 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
    this room is about to dispose with nobody in it to see a reveal, and the
    hunter would otherwise watch the mirror countdown run down to a bell that
    never rings.
-4. **A match takes a role only from a seat its lobby reserved.** Reservation
+4. **A declared type is not a check.** `msg` is a stranger's JSON, so a handler
+   types its fields `unknown` and bounds each one — `vec3` / `point` / `angles`
+   for vectors, `clamp` for scalars. Writing `position: [number, number, number]`
+   on a message type and then relaying it is a claim, not validation: `shoot` did
+   exactly that and fanned unbounded junk out to the whole room. `clamp` alone is
+   not enough for a vector either, since it turns a `NaN` into a `0` — an
+   all-`NaN` position has to be *refused*, not quietly moved to the middle of the
+   map.
+5. **A match takes a role only from a seat its lobby reserved.** Reservation
    options and a client's own join options arrive at `onJoin` indistinguishably,
    so the lobby mints a `pass` and includes it in every reservation. Without it
    any chameleon could leave a match and rejoin claiming the gun — and every
@@ -70,9 +78,14 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
 - **`cling` is a surface, not a flag** — `CLING_NONE` / `CLING_WALL` /
   `CLING_CEILING` from `shared/`. Clamped like every other number off the wire
   and forced to `CLING_NONE` for a hunter, because clinging silences footsteps.
+- **Every message name comes from `MESSAGES` in `shared/protocol.ts`**, never a
+  string literal. `messages.ts` and `room.ts` both destructure it
+  (`const { toServer, toClient } = MESSAGES`). The names themselves are the one
+  part of the protocol that used to exist twice with nothing joining the copies.
 - **Messages in** (← `client/net/send.ts`): `state`, `paint`, `clearSkin`,
   `shoot`, `kill`, `whistle`, `chat`, plus `start` and `setMap` from a lobby's
-  host.
+  host — the last two wired in `room.ts` because only a lobby has anything to
+  start.
 - **Messages out** (→ `client/net/client.ts`): `shot`, `whistle`, `mark`,
   `caught`, `clearSkin`, `paint`, `chat`, `moveTo`, `moveFailed`. **There is no
   "match over" message** — `moveTo` is the news.
@@ -123,8 +136,11 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
   hunter who does *not* travel at Start.
 - `match.test.ts` — the clock ringing its own bell, the pass rule in both
   directions, a catch converting rather than removing, both ways a round ends,
-  `kill` refused during the reveal, and a `NaN` position clamped rather than
-  encoded.
+  `kill` refused during the reveal, a `NaN` position clamped rather than
+  encoded, and what `shoot` is allowed to relay: a well-formed mark passes
+  through, a payload that is not three vectors is refused outright (not even the
+  bang), and a wild one is bounded to the map first. It reads the relays through
+  `told()` in the harness, since a mark is kept nowhere either.
 
 `clean.test.ts` pins the three decisions on top of the word list — mask chat,
 replace a name, read a name more strictly — and that every fallback name

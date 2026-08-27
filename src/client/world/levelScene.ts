@@ -134,7 +134,56 @@ const LAMP_DECAY = 1.6;
 
 type PrepareLevelOptions = {
   lights?: LightOptions;
+  matte?: boolean;
 };
+
+/**
+ * Strip every specular response out of a map's materials.
+ *
+ * **A highlight is a giveaway the paint cannot answer.** A chameleon hides by
+ * matching the colour of what it lies against, and a glossy surface does not
+ * *have* one colour — it has a sheen that moves with the viewer, so the same
+ * body reads as matching from one side of the room and as a silhouette from the
+ * other. Rough everything to 1 and the surface's appearance is its albedo,
+ * which is the one thing a brush can copy.
+ *
+ * The maps and the metalness go with it: a `metalnessMap` puts the sheen back
+ * per-texel, and glTF's default metallic factor is 1, so a kit that ships an MR
+ * texture is trusting that texture completely.
+ *
+ * **As matte as `MeshStandardMaterial` gets.** A dielectric keeps a fixed 4%
+ * Fresnel term that no parameter removes; at roughness 1 it is spread across
+ * the whole hemisphere rather than gathered into a highlight. Killing it
+ * outright would mean swapping the material type, which costs the normal maps
+ * the kit is largely made of.
+ *
+ * Mutates the materials the loaded glTF owns, rather than cloning: the cache
+ * hands the same parsed file to every mount of this map, and the operation is
+ * idempotent.
+ */
+function makeMatte(material: THREE.Material | THREE.Material[], seen: Set<string>) {
+  for (const m of Array.isArray(material) ? material : [material]) {
+    if (seen.has(m.uuid)) continue;
+    seen.add(m.uuid);
+    const std = m as THREE.MeshStandardMaterial;
+    if (!std.isMeshStandardMaterial) continue;
+    std.roughness = 1;
+    std.metalness = 0;
+    std.roughnessMap = null;
+    std.metalnessMap = null;
+    std.envMap = null;
+    std.envMapIntensity = 0;
+    const phys = m as THREE.MeshPhysicalMaterial;
+    if (phys.isMeshPhysicalMaterial) {
+      phys.specularIntensity = 0;
+      phys.clearcoat = 0;
+      phys.sheen = 0;
+      phys.iridescence = 0;
+      phys.transmission = 0;
+    }
+    std.needsUpdate = true;
+  }
+}
 
 const SCALE = new THREE.Vector3();
 const SIZE = new THREE.Vector3();
@@ -290,6 +339,8 @@ export function prepareLevel(
 
   const collision: [THREE.Mesh, ColliderKind][] = [];
   const drawn: THREE.Mesh[] = [];
+  /** Materials are shared across meshes; each is only worth flattening once. */
+  const matted = new Set<string>();
   const sunShadows: THREE.DirectionalLight[] = [];
   let lights = 0;
   let shadowCasters = 0;
@@ -358,6 +409,7 @@ export function prepareLevel(
     // sky says it is shining into. They still *receive* — see invariant 18.
     mesh.castShadow = !(shadowTuning.exclude ?? []).some((p) => mesh.name.startsWith(p));
     mesh.receiveShadow = true;
+    if (options.matte) makeMatte(mesh.material, matted);
     drawn.push(mesh);
   });
 

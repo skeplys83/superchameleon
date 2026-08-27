@@ -5,6 +5,7 @@ import {
   RapierRigidBody,
   RigidBody,
   CuboidCollider,
+  CylinderCollider,
   useRapier,
   type RapierCollider,
 } from "@react-three/rapier";
@@ -426,10 +427,37 @@ export function Player({
     const allowed = controller.computedMovement();
     m.grounded = controller.computedGrounded();
 
+    // **No input, no travel.** `setSlideEnabled` projects a blocked move along
+    // whatever it hit, and both of the holds this game applies every frame are
+    // pushes into a surface: `GROUND_STICK` down into the floor, `STICK_SPEED`
+    // into the wall being climbed. On anything but a perfectly square face —
+    // a trimesh prop, two boxes meeting at a seam, a collider a degree off — a
+    // fraction of that push survives the projection as sideways motion, and a
+    // body asking to stand still creeps across the surface it is standing on.
+    // So the hold is allowed to hold and nothing else: what is kept is the
+    // component along the surface's own normal, and the tangent is dropped.
+    // A release keeps everything — that push *is* the movement.
+    let moveX = allowed.x;
+    let moveY = allowed.y;
+    let moveZ = allowed.z;
+    if (releasing) {
+      // Nothing to clamp: the whole frame is the shove away from the surface.
+    } else if (clinging && alongSurface.lengthSq() === 0) {
+      const normal = m.cling!;
+      const into = moveX * normal.x + moveY * normal.y + moveZ * normal.z;
+      moveX = normal.x * into;
+      moveY = normal.y * into;
+      moveZ = normal.z * into;
+    } else if (!clinging && move.lengthSq() === 0) {
+      // Standing or falling with no key down: gravity is the only axis left.
+      moveX = 0;
+      moveZ = 0;
+    }
+
     // Catch `bodyPos` up to where the body is *going*, not where it was when the
     // frame started. The camera below reads it, and a frame of lag against a
     // world that has already moved is seen as the view lagging the body.
-    bodyPos.set(bodyPos.x + allowed.x, bodyPos.y + allowed.y, bodyPos.z + allowed.z);
+    bodyPos.set(bodyPos.x + moveX, bodyPos.y + moveY, bodyPos.z + moveZ);
 
     // The controller only ever checked the *movement*. Between `p` and here the
     // body may also have been shifted outright — by the foot compensation or by
@@ -448,7 +476,7 @@ export function Player({
     // plays a footstep above — so the gun moves with the steps you can hear and
     // holds still in the air. Horizontal only, for the same reason the stepper
     // is: falling is not walking.
-    if (!clinging && m.grounded) addWalked(Math.hypot(allowed.x, allowed.z));
+    if (!clinging && m.grounded) addWalked(Math.hypot(moveX, moveZ));
 
     // Stop accumulating downward speed the moment the floor is under us, or a
     // long fall leaves `vy` at -40 and the first step off a kerb is a plummet.
@@ -459,7 +487,7 @@ export function Player({
     // player grinds along the underside of the roof until gravity finally eats
     // it, which is the "pressing against the ceiling" you can feel through the
     // camera. Cutting to zero drops them away cleanly.
-    if (m.vy > 0 && allowed.y < desired.y * HEAD_BUMP) {
+    if (m.vy > 0 && moveY < desired.y * HEAD_BUMP) {
       m.vy = 0;
       m.rising = false;
     }
@@ -556,16 +584,31 @@ export function Player({
         position={spawn}
         canSleep={false}
       >
-        <CuboidCollider
-          // `args` is read once, at creation, so a pose with a different box
-          // needs a new collider — but only when the numbers actually differ,
-          // or standing still and pressing 1 then 3 would rebuild it for nothing.
-          key={poseExtents(pose, [hx, hy, hz], surfaceKind).join()}
-          ref={collider}
-          args={poseExtents(pose, [hx, hy, hz], surfaceKind)}
-          // Only until the first frame loop turns it into the body's yaw.
-          position={[...poseCentre(pose, hy, surfaceKind)]}
-        />
+        {role === "hunter" ? (
+          /* **A cylinder, and only for the hunter.** A box turns with the body,
+             so how close it lets you stand to a wall depends on which way you
+             are facing — a corner reaches out by root two, a face by one. That
+             matters now that a hunter's collider is sized to *hold them off*
+             what they are searching: the standoff has to be the same in every
+             direction or the way to get your eye onto a painting is to face it
+             squarely. It also removes the diagonal, which is what a rotating
+             1.29 m box was pushing through a 1.49 m doorway.
+
+             A chameleon keeps its cuboid: `figure/poses.ts` states every pose
+             as a box, and lying flat is not a shape a cylinder describes. */
+          <CylinderCollider ref={collider} args={[hy, hx]} position={[0, 0, 0]} />
+        ) : (
+          <CuboidCollider
+            // `args` is read once, at creation, so a pose with a different box
+            // needs a new collider — but only when the numbers actually differ,
+            // or standing still and pressing 1 then 3 would rebuild it for nothing.
+            key={poseExtents(pose, [hx, hy, hz], surfaceKind).join()}
+            ref={collider}
+            args={poseExtents(pose, [hx, hy, hz], surfaceKind)}
+            // Only until the first frame loop turns it into the body's yaw.
+            position={[...poseCentre(pose, hy, surfaceKind)]}
+          />
+        )}
         <group ref={visual}>
           {/* In first person the camera sits inside the head, so the hunter's
               own figure is hidden and the viewmodel stands in for it. */}

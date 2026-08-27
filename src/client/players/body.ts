@@ -35,7 +35,31 @@ import type { Role } from "@/shared/protocol";
  * whichever way they are folded.
  */
 const CHAMELEON = 0.12;
-const HUNTER = 0.52;
+/**
+ * **A hunter is held off what they are searching, on purpose.**
+ *
+ * Theirs is not a hiding collider and never was, but it is now deliberately
+ * *wider than the figure needs*: the collider is the only thing deciding how
+ * close a hunter's eye can get to a wall, a bed or a painting, and pressed up
+ * against one there is no camouflage left to beat — at ten centimetres a
+ * painted body is just a body. Standing them off it hands the distance back to
+ * the chameleon, and distance is what every other part of the hunt is built on:
+ * `HUNT_DPR` blurs by how few pixels a target covers, and the grain in
+ * `hud/HuntVision` is worth most on a soft edge seen from across a room.
+ *
+ * **The doorways are the ceiling, and this is now against it.** At 0.78 the
+ * collider is a 1.44 m cylinder against the hospital's narrowest clear opening,
+ * 1.49 m — under three centimetres of margin each side. A cylinder is what makes
+ * even that possible: `Player.tsx` gives a hunter a `CylinderCollider`, and a
+ * ball in plan has no diagonal, so what must fit through a door is the diameter
+ * whichever way the body is facing. The box this replaced was 1.29 across and
+ * 1.82 corner to corner — wider than the doorway it was walking through.
+ *
+ * **Do not raise this without widening the doorways first.** Past the opening
+ * the hunter does not squeeze, they simply stop: a kinematic body that cannot
+ * fit gets no movement back at all, and the ward wings become unreachable.
+ */
+const HUNTER = 0.78;
 
 /**
  * How big each body is against the size it was built at, so the rooms read as
@@ -62,7 +86,7 @@ export const BODY_SCALE: Record<Role, number> = {
    *  the smaller it is against a furnished room the more of that room can hide
    *  it. Everything proportional follows: collider, figure, eye height, brush
    *  ring, stride, cling tolerance, and every pose box in `figure/poses.ts`. */
-  chameleon: 0.78,
+  chameleon: 0.66,
 };
 
 export const BODY: Record<Role, [hx: number, hy: number, hz: number]> = {

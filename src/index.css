@@ -25,3 +25,56 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/**
+ * The hunter's film grain — see `hud/HuntVision.tsx` for why it exists.
+ *
+ * The noise is one inline SVG `feTurbulence`, tiled: no image to download, no
+ * canvas to redraw, and the browser rasterises it once. It is drawn at full CSS
+ * resolution *over* a world rendered at `HUNT_DPR`, which is the point — sharp
+ * high-frequency noise on top of a soft picture is what breaks up the one edge
+ * a blur leaves behind.
+ *
+ * **Only `transform` is animated**, in whole steps rather than smoothly, which
+ * is what reads as grain rather than as a drifting texture. A transform is
+ * compositor-only, so this costs no layout, no paint and no main-thread work
+ * per frame. The layer is oversized so the drift never exposes an edge.
+ */
+@keyframes hunt-grain-drift {
+  0% { transform: translate(0, 0); }
+  10% { transform: translate(-5%, -5%); }
+  20% { transform: translate(-13%, 3%); }
+  30% { transform: translate(7%, -12%); }
+  40% { transform: translate(-5%, 13%); }
+  50% { transform: translate(-13%, 7%); }
+  60% { transform: translate(9%, 5%); }
+  70% { transform: translate(4%, -12%); }
+  80% { transform: translate(-9%, 9%); }
+  90% { transform: translate(5%, 12%); }
+  100% { transform: translate(0, 0); }
+}
+
+.hunt-grain {
+  position: absolute;
+  /* Oversized: the drift moves it by up to 13% and no edge may come into view. */
+  inset: -30%;
+  opacity: 0.32;
+  /* Rougher than it started: a lower `baseFrequency` and two octaves instead of
+     three make bigger, blockier clumps rather than a fine even mist, and the
+     `feComponentTransfer` stretches them toward black and white so the speckle
+     bites instead of hazing. Tile scaled up to match, or the coarser noise would
+     just repeat sooner. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncG type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncB type='linear' slope='2.2' intercept='-0.6'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 240px 240px;
+  animation: hunt-grain-drift 0.9s steps(1, end) infinite;
+  will-change: transform;
+}
+
+/* A full-screen flicker is the classic migraine trigger, and the vignette alone
+   still does half the job. */
+@media (prefers-reduced-motion: reduce) {
+  .hunt-grain {
+    animation: none;
+  }
+}

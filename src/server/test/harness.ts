@@ -47,6 +47,17 @@ export function heard(client: Client) {
   return lines;
 }
 
+/**
+ * Every message of one type a client is *told*, in order. The generic half of
+ * `heard`: a relay keeps nothing in state either, so listening is the only way
+ * to see what the room actually sent.
+ */
+export function told<T>(client: Client, type: string) {
+  const messages: T[] = [];
+  client.onMessage(type, (msg: T) => messages.push(msg));
+  return messages;
+}
+
 /** Give the room loop a few ticks to settle. */
 export const settle = (ms = 150) => new Promise((r) => setTimeout(r, ms));
 

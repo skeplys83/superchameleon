@@ -26,6 +26,36 @@ import type { Grave } from "@/client/net";
  */
 const MAX_FPS = 60;
 
+/** The fallback for a map that names no `dpr`. A module constant rather than a
+ *  literal at the use site, because `HuntVision` restores it out of an effect
+ *  and a fresh array every render would resize the renderer every render. */
+const DEFAULT_DPR: [number, number] = [1, 2];
+
+/**
+ * What a hunter sees through during the hunt: framebuffer pixels per CSS pixel,
+ * so a half is a quarter of the pixels, upscaled back to fill the window. The
+ * one number that tunes how blind the hunt is.
+ *
+ * **Absolute, rather than a fraction of the map's own `dpr`.** r3f resolves a
+ * `[min, max]` range against the display, so the map's `[1, 1.5]` is 1.5 on a
+ * retina panel and 1 on a plain one; scaling those by a common factor would
+ * hand the player with the better screen a sharper hunt, which is an advantage
+ * bought with hardware. One flat number means every hunter looks for
+ * chameleons through the same pixels.
+ */
+const HUNT_DPR = 0.3;
+
+/**
+ * How that half-resolution frame is scaled back up to fill the window.
+ *
+ * `"auto"` lets the browser interpolate — a soft blur, which is what smears a
+ * still chameleon into the wall it is painted to match. `"pixelated"` is the
+ * crunchy alternative: nearest-neighbour quantises into blocks rather than
+ * smearing, and reads more PSX. One word, either way; `HUNT_DPR` is the knob
+ * for *how much*, this is the knob for *which kind*.
+ */
+const HUNT_UPSCALE = "auto";
+
 /**
  * Draws at most `fps` frames a second.
  *
@@ -108,6 +138,23 @@ export default function Scene({
 }) {
   const chosen = MAPS[safeMapId(map)];
   const render = chosen.render;
+  const dpr = render.dpr ?? DEFAULT_DPR;
+
+  /**
+   * The hunter's handicap: a chameleon lying still against the wall it is
+   * painted to match is exactly what a low resolution destroys, so the hunt
+   * gets harder without taking anything the player needs to *play*. The HUD
+   * surviving is not a trick — `hud/` renders outside the Canvas, so this
+   * cannot reach it, and the crosshair is the CSS cursor. Only the world
+   * degrades — **the shotgun viewmodel included, deliberately**: it is drawn
+   * in-canvas, and a sharp gun held against a soft world is the thing that
+   * would look broken.
+   *
+   * **Gated on the phase as much as on the role**: everyone in a lobby is
+   * nominally a hunter, so the role alone would pixelate the waiting room. It
+   * switches itself off when `hunting` does, which is the reveal.
+   */
+  const blinded = role === "hunter" && hunting;
 
   // Both debug pictures follow the toggle, so this re-renders on the flip.
   const devMode = useDevMode();
@@ -117,7 +164,10 @@ export default function Scene({
       <Canvas
         shadows={render.shadows?.enabled ?? true}
         camera={{ fov: 60, position: [0, 5, 11] }}
-        dpr={render.dpr ?? [1, 2]}
+        dpr={blinded ? HUNT_DPR : dpr}
+        // Goes on r3f's wrapper div and reaches the canvas because
+        // `image-rendering` inherits.
+        style={{ imageRendering: blinded ? HUNT_UPSCALE : "auto" }}
         gl={{ antialias: render.antialias ?? true }}
         onCreated={({ gl, scene }) => {
           gl.toneMapping = THREE[render.toneMapping ?? "ACESFilmicToneMapping"];

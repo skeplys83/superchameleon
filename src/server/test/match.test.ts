@@ -1,6 +1,6 @@
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ColyseusTestServer } from "@colyseus/testing";
-import { bootTestServer, connected, heard, inner, roomOf, settle } from "./harness.ts";
+import { bootTestServer, connected, heard, inner, roomOf, settle, told } from "./harness.ts";
 import { DEFAULT_MATCH_MAP } from "../../shared/mapIds.ts";
 
 let colyseus: ColyseusTestServer;
@@ -225,6 +225,74 @@ describe("a match", () => {
     // A NaN written into schema propagates to every client, so it becomes 0.
     expect(Number.isFinite(me.yaw)).toBe(true);
     expect(me.pose).toBeLessThanOrEqual(4);
+  });
+
+  it("buries a junk catch position where the victim is, not at the origin", async () => {
+    const victim = await openMatch();
+    const hunter = await joinMatch(victim.roomId, "hunter", { role: "hunter", pass: PASS });
+    await beginHunt(victim.roomId);
+    roomOf(colyseus, victim.roomId).state.players.get(victim.sessionId)!.x = 7;
+
+    // A clamped NaN is 0, which would put every junk grave in the middle of the
+    // map — a plausible-looking spot rather than a refused one.
+    hunter.send("kill", { id: victim.sessionId, position: [Number.NaN, 0, 0] });
+    await settle();
+
+    expect(victim.state.graves[0]).toContain("7.00");
+  });
+});
+
+describe("a shot", () => {
+  type Mark = { position: number[]; rotation: number[]; origin: number[] };
+
+  it("is relayed with its position, rotation and origin", async () => {
+    const client = await openMatch();
+    const marks = told<Mark>(client, "mark");
+
+    client.send("shoot", { position: [1, 2, 3], rotation: [0, 1, 0], origin: [0, 1, 0] });
+    await settle();
+
+    expect(marks.length).toBe(1);
+    expect(marks[0].position).toEqual([1, 2, 3]);
+  });
+
+  it("is refused outright when its payload is not three vectors", async () => {
+    const client = await openMatch();
+    const marks = told<Mark>(client, "mark");
+    const shots = told<{ id: string }>(client, "shot");
+
+    // Marks are the one relayed payload with no size cap, and every client
+    // hands the numbers straight to a renderer. This used to be typed as a
+    // vector and relayed untouched, which is a claim about a stranger's input
+    // rather than a check on it.
+    client.send("shoot", { position: "over there", rotation: [0, 1, 0], origin: [0, 1, 0] });
+    client.send("shoot", { position: [1, 2], rotation: [0, 1, 0], origin: [0, 1, 0] });
+    client.send("shoot", { position: [1, 2, 3], rotation: [Number.NaN, 1, 0], origin: [0, 1, 0] });
+    client.send("shoot", { position: [1, 2, 3], rotation: [0, 1, 0] });
+    await settle();
+
+    expect(marks).toEqual([]);
+    // Not even the bang: a refused shot never happened.
+    expect(shots).toEqual([]);
+  });
+
+  it("bounds a wild position to the map before anyone renders it", async () => {
+    const client = await openMatch();
+    const marks = told<Mark>(client, "mark");
+
+    client.send("shoot", {
+      position: [1e12, 1e12, -1e12],
+      rotation: [1e9, 0, 0],
+      origin: [0, 1, 0],
+    });
+    await settle();
+
+    expect(marks.length).toBe(1);
+    const [x, y, z] = marks[0].position;
+    expect(Math.abs(x)).toBeLessThanOrEqual(40);
+    expect(y).toBeLessThanOrEqual(30);
+    expect(Math.abs(z)).toBeLessThanOrEqual(40);
+    expect(Math.abs(marks[0].rotation[0])).toBeLessThanOrEqual(Math.PI * 2);
   });
 });
 

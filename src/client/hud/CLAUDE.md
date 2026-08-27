@@ -105,6 +105,16 @@ reads them from there now.
   `window` by drei's `KeyboardControls`, so without it typing "was" walks you
   across the arena. That is also why Esc is handled inside the input rather
   than by `usePauseControl` — the stopped event never reaches the global one.
+- **`HuntVision` is grain and a vignette over the hunter's own view**, on
+  exactly the condition `Scene` blurs on. It exists because `HUNT_DPR` is a
+  *resolution* handicap: its strength is proportional to how few pixels a
+  chameleon covers, so it is mush at twenty metres and nearly free at two, where
+  a body still fills hundreds of pixels after the downscale. Grain has the same
+  amplitude everywhere on screen, so it costs a close body what it costs a
+  distant one, and what it eats is the soft edge a blur leaves behind. **Two
+  divs and a compositor-only animation** — no render target and no post-process
+  pass, which is the whole reason it can live out here. Mounted before the
+  panels, so the vignette darkens the world and never the HUD.
 - **The controls legend is the chameleon's, and there is no other.** A hunter
   walks and shoots; their legend said WASD, Space, Mouse, Left click, which is
   four rows of what every first-person game has already taught, so they get no

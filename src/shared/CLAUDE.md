@@ -1,7 +1,7 @@
 # shared — what both halves have to agree on
 
-**Owns:** `Role`, `Phase`, the durations and limits both sides read, and the map
-registry.
+**Owns:** `Role`, `Phase`, every message name that crosses the wire, the
+durations and limits both sides read, and the map registry.
 
 **Imported by `src/server/` and `src/client/`, and it may import from neither.**
 That is an ESLint rule. It also has to load in a Node process with no bundler
@@ -11,7 +11,7 @@ and no DOM, so nothing here may touch `window`, React or three.js.
 
 | file         | what                                                            |
 | ------------ | ----------------------------------------------------------------- |
-| `protocol.ts`| `Role`, `Phase`, phase durations, fire, whistle and chat rates, bounds |
+| `protocol.ts`| `Role`, `Phase`, `MESSAGES`, phase durations, fire, whistle and chat rates, bounds |
 | `mapIds.ts`  | the map ids, the lobby map, and which ones a match may use       |
 | `maps.ts`    | the registry: name, file, spawn, bound, `roundSeconds`, lighting |
 | `names.ts`   | the fallback player names, and `randomName()`                    |
@@ -45,6 +45,14 @@ doc names the constant beside the number for exactly this reason.
   code. The server keeps accepting the id: it cannot tell which build asked, and
   a second source of truth for "is this map real" is worse than a menu that
   simply does not offer one.
+- **`MESSAGES` is the whole wire vocabulary**, split into `toServer` and
+  `toClient` because four names (`paint`, `chat`, `whistle`, `clearSkin`) travel
+  each way with different payloads — Colyseus keeps the two directions in
+  separate namespaces, so that is a real distinction. `ClientMessage` and
+  `ServerMessage` are the `keyof` unions over it. Both ends destructure the half
+  they need (`const { toServer } = MESSAGES`) and no `send`, `onMessage` or
+  `broadcast` under `src/` may name a message with a string literal: that is the
+  only thing making a rename break at compile time instead of at play time.
 - **`POSE_COUNT` is checked against `figure/poses.ts`** at import time.
 - **`CLING_NONE` / `CLING_WALL` / `CLING_CEILING` are ordered so `!== CLING_NONE`
   still means "is clinging"**, which is all `sound/` ever asks. It was a boolean

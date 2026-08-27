@@ -49,6 +49,13 @@ export type LightOptions = {
 
 export type MapRenderConfig = {
   lights?: LightOptions;
+  /**
+   * Flatten every material in the map: rough 1, no metalness, no MR maps.
+   *
+   * A specular highlight moves with the viewer, so a glossy surface has no one
+   * colour for a chameleon to match — see `makeMatte` in `world/levelScene.ts`.
+   */
+  matte?: boolean;
   toneMapping?: ToneMappingName;
   exposure?: number;
   outputColorSpace?: OutputColorSpaceName;
@@ -138,13 +145,41 @@ export const MAPS: Record<MapId, GameMap> = {
     background: "#0b0f0d",
     render: {
       lights: {
-        // 25 ceiling lamps, none casting: the map is lit by its own fixtures.
-        scale: 0.05,
-        distance: 20,
-        ambient: { intensity: 0.35, color: "#eaf2ee" },
+        // 24 ceiling lamps, none casting: the map is lit by its own fixtures.
+        // **The lamps do the lighting, and the fill only keeps the corners
+        // readable.** It was the other way round, and flat fill is the one kind
+        // of light that cannot help a chameleon: it is directionless, so it
+        // multiplies albedo and nothing else. White walls went straight to 255
+        // and stayed there while a painted body stayed dark, and neither showed
+        // any form — so the two could never match, whatever the paint. Light
+        // that *falls* on a surface lands on the body in front of it the same
+        // way, which is what lets one sit inside the other's value range.
+        scale: 0.07,
+        distance: 26,
+        // **The floor of the picture, and the reason it is this high.** A hunter
+        // sees the world at `HUNT_DPR`, upscaled — blurring keeps low-frequency
+        // contrast and throws away detail, so the one thing that survives it is
+        // a body much darker than what it lies against. Lighting the shadows
+        // rather than leaving them near black is what lets a painted chameleon
+        // sit *inside* the wall's own value range instead of reading as a
+        // silhouette cut out of it.
+        ambient: { intensity: 0.3, color: "#eaf2ee" },
+        // A little sky-over-ground on top, so a wall and the floor under it are
+        // not the same flat value. Cheap, and it costs no contrast at the body.
+        hemisphere: { sky: "#f2f7f4", ground: "#4c5a52", intensity: 0.18 },
       },
-      toneMapping: "AgXToneMapping",
-      exposure: 1.0,
+      // **Neutral rather than AgX.** AgX's toe crushes everything near black
+      // into the same value, which is exactly the range a dim ward lives in —
+      // it read as heavy and murky against the same scene in Blender. Neutral
+      // holds the midtones where the lamps put them.
+      // Every surface flat, so what a body has to match is an albedo and not a
+      // sheen that changes with where the hunter is standing.
+      matte: true,
+      toneMapping: "NeutralToneMapping",
+      // Headroom on purpose: a white ward wall has to land near 0.8, not clip at
+      // 1.0. A clipped wall has no shading left to match, so anything in front
+      // of it reads as a cut-out however well it is painted.
+      exposure: 0.7,
       outputColorSpace: "SRGBColorSpace",
       antialias: true,
       dpr: [1, 1.5],

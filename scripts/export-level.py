@@ -29,6 +29,10 @@ def bake_module():
 
 out = os.path.abspath(sys.argv[sys.argv.index("--") + 1])
 
+# The collision prefixes `world/levelScene.ts` reads. Collision is not drawn, so
+# neither the stray check below nor the count at the end treats it as geometry.
+PREFIXES = ("col_", "colhull_", "coltri_", "colball_")
+
 # The kit palette must never be exported: it is 211 models parked off the side
 # of the map, and including it multiplies the file size and drops a field of
 # furniture into the level. It is normally excluded in the .blend already; this
@@ -67,6 +71,51 @@ def unhide(layer_collection):
 
 
 unhide(bpy.context.view_layer.layer_collection)
+
+# The mirror of the leak above, and the quieter one: a piece *placed in the map*
+# that was never taken out of the palette collection goes out with the palette,
+# so the map is missing a door and the export says nothing. The palette is parked
+# off the side of the level, so anything in it standing inside the level's own
+# footprint is that mistake. Named rather than fixed: only the .blend can say
+# which collection a piece belongs to.
+def kit_strays():
+    kit = next((c for c in bpy.context.view_layer.layer_collection.children
+                if c.name == "kit"), None)
+    if not kit:
+        return []
+    inside = set()
+
+    def gather(collection):
+        inside.update(o.name for o in collection.objects)
+        for child in collection.children:
+            gather(child)
+
+    gather(kit.collection)
+
+    # Measured over what is *drawn*, not over the colliders: a collider built
+    # on a palette piece and left there stretches the footprint over the palette
+    # itself, and then every model in it reads as a stray.
+    exporting = [o for o in bpy.data.objects
+                 if o.name not in inside and o.type in {"MESH", "LIGHT"}
+                 and not o.name.startswith(PREFIXES)]
+    if not exporting:
+        return []
+    xs = [o.matrix_world.translation.x for o in exporting]
+    ys = [o.matrix_world.translation.y for o in exporting]
+    lo_x, hi_x, lo_y, hi_y = min(xs), max(xs), min(ys), max(ys)
+    # World space, not `location`: a door's handle is parented to the door and
+    # sits at the origin of nothing.
+    return [o.name for o in bpy.data.objects
+            if o.name in inside and o.type == "MESH"
+            and lo_x <= o.matrix_world.translation.x <= hi_x
+            and lo_y <= o.matrix_world.translation.y <= hi_y]
+
+
+strays = kit_strays()
+if strays:
+    shown = ", ".join(sorted(strays)[:8]) + (", ..." if len(strays) > 8 else "")
+    print(f"  ! {len(strays)} object(s) stand inside the map but are still in the 'kit' "
+          f"collection, so they will NOT be exported: {shown}")
 
 hidden_objects = []
 for obj in bpy.data.objects:
@@ -237,8 +286,7 @@ for obj in hidden_objects:
     obj.hide_set(True)
 
 # A level with no collision loads, draws, and drops you through the floor — so
-# it fails here instead. The prefixes are the ones `world/levelScene.ts` reads.
-PREFIXES = ("col_", "colhull_", "coltri_", "colball_")
+# it fails here instead.
 colliders = [o.name for o in bpy.data.objects if o.name.startswith(PREFIXES)]
 if not colliders:
     raise SystemExit(f"refusing to write {out}: no col_* objects — nothing to stand on")

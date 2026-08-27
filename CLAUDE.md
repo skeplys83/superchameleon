@@ -29,7 +29,12 @@ the dungeon, hiding included):
 3. **hunt**, the rest of the round. The bell rings, the hunter is brought in.
    **Being caught does not put you out**: you become a hunter yourself, at the
    spawn point, stripped back to white, and you join the hunt. So the hunt grows
-   and the last chameleon is hardest to catch.
+   and the last chameleon is hardest to catch. **A hunter looks through a
+   coarser picture than everybody else** — the world renders at half resolution
+   for them, and only for them, and only while the hunt is on, which is what a
+   figure lying still against the wall it is painted to match disappears into.
+   The HUD keeps its own resolution for free, because `hud/` draws outside the
+   Canvas.
 4. **reveal**, `REVEAL_SECONDS` (20s). The survivors pulse red through the walls, standing exactly
    where they hid, and every grave marks where somebody was found. **The
    survivors are rooted** — they are the exhibit, and a spot they walk away from
@@ -105,6 +110,59 @@ the one folder with a hard rule** — it renders outside the Canvas and must not
 import from `world/`, `figure/`, `players/` or `combat/`. That is an ESLint rule
 too, with `figure/poses` as the one allowed exception.
 
+## The protocol
+
+**Everything is websockets — but not everything is a message.** There are two
+channels and the difference between them is the first thing to get right:
+
+| channel                                                 | carries                                                                                                          | shape                             |
+| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| **Colyseus schema sync** — `server/schema.ts`           | anything with a *current value*: positions, look, pose, cling, role, name, phase, `timeLeft`, map, graves, skins | binary deltas, sent automatically |
+| **named messages** — `MESSAGES` in `shared/protocol.ts` | anything that *happens once*: a trigger pull, a catch, a chat line, a whistle, a room change                     | a name plus a msgpacked payload   |
+
+**Movement is not a message.** A client posts its own transform upstream as a
+`state` message twenty times a second — on a `setInterval` in
+`players/useStateBroadcast.ts`, deliberately not `useFrame`, because a
+backgrounded tab stops running frames and would look to everybody else like the
+player vanishing. Everyone *else's* movement arrives as a schema patch, and
+`net/remotes.ts` mutates the same objects in place rather than re-rendering. So
+there is no `move` broadcast, and adding one would be the wrong instinct: if a
+latecomer needs to be told it on join it is state, and Colyseus replays state
+for free.
+
+**Every message name lives in `MESSAGES`, split by direction.** They used to be
+bare literals at both ends, which meant a rename on one side left the other
+sending into a room with no handler — no type error, no failing test, just a
+feature that quietly stopped. Four names (`paint`, `chat`, `whistle`,
+`clearSkin`) travel both ways with different payloads, which is why the table has
+a `toServer` half and a `toClient` half rather than one list.
+
+```
+sending    client/net/send.ts    →  server/messages.ts, and start/setMap in server/room.ts
+receiving  server broadcasts     →  client/net/client.ts  →  client/net/events.ts  → the app
+```
+
+`net/events.ts` is the seam: nothing outside `net/` calls `onMessage`. A handler
+turns a frame into an `emit*` call and the rest of the client subscribes to that,
+which is why `combat/` and `sound/` never mention the wire.
+
+**The trust model is one sentence: the client is asked, the server decides.**
+Every handler in `server/messages.ts` bounds what it takes off the wire — the
+position clamped per map, `cling` refused from a hunter, `pose` clamped to
+`POSE_COUNT`, strokes capped in length and count, chat stripped of control
+characters and filtered, `kill` checked against phase and role and both sides'
+roles, and the trigger rate-limited. **A declared TypeScript type is not a
+check** — `shoot` once typed its payload as three vectors and relayed it
+untouched, which meant a crafted client could fan arbitrary junk out to the whole
+room. Anything new that arrives from a client is validated in that file or it is
+not validated at all.
+
+**Two things deliberately are not verified.** A hunter's `kill` is taken on the
+client's word — there is no server-side raycast — and so is a player's position.
+That is the accepted trade-off for a party game with no accounts: it bounds what
+a cheat can do (the map, the fire rate, the role, the phase) without pretending
+to a simulation the server does not run.
+
 ## How the docs work
 
 **Every folder documents itself, in about forty lines.** Each folder's
@@ -139,12 +197,12 @@ commit`.
 
 ## Checking your work
 
-| command             | what it proves                                                                                                         |
-| ------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `npm run typecheck` | both projects compile, and neither half used the other's globals                                                       |
-| `npm test`          | the server suite in `src/server/test/`: 90 tests over the rooms, the draw, the clock, the lobby's chat, and the filter |
-| `npm run lint`      | the import boundaries, and the React rules                                                                             |
-| `npm run build`     | the client bundles                                                                                                     |
+| command             | what it proves                                                                                                                                          |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm run typecheck` | both projects compile, and neither half used the other's globals                                                                                        |
+| `npm test`          | the server suite in `src/server/test/`: 95 tests over the rooms, the draw, the clock, the lobby's chat, what the wire is allowed to say, and the filter |
+| `npm run lint`      | the import boundaries, and the React rules                                                                                                              |
+| `npm run build`     | the client bundles                                                                                                                                      |
 
 The **client has no automated tests** — it is three.js in a frame loop — so a
 change there is checked by running it. See [docs/VERIFYING.md](docs/VERIFYING.md).
@@ -232,7 +290,7 @@ https://atomicrealm.itch.io/post-apocalyptic-interiors
 https://joethejunkbox.itch.io/psx-subway-station
 https://vyrez-games.itch.io/psx-horror-house-modular-pack-v1
 https://amos-makes.itch.io/psx-hospital-pack
-https://madduck.itch.io/modular-3d-hospital-environment
+https://madduck.itch.io/modular-3d-hospital-environment - in use
 https://ink-ribbon.itch.io/psx-restroom-environment-asset-pack
 https://retroshaper.itch.io/dungeon-maker-with-geometry-nodes - interesting duengon
 https://lewie-kowalski.itch.io/psx-retro-props-pack

@@ -126,6 +126,12 @@ between orientations with the same damping the joints use.
 - **Nothing here suspends.** The model is fetched imperatively and a figure
   draws nothing until it lands — suspending would tear down the collider it
   sits inside.
+- **The body is matte, and it has to stay that way.** `roughness: 1,
+  metalness: 0` — the same numbers `matte` in `maps.ts` flattens a whole map to.
+  A highlight is a tell no paint can answer: a specular lobe moves with the
+  viewer, so a glossier body than the wall behind it reads as a silhouette from
+  one side of the room however well it is matched. It was 0.55, and caught a
+  sheen along every limb that the ward's plaster did not.
 - **`paint/` reads the real limb sizes from here**, and this folder reads the
   canvases from `paint/skin.ts`. Known, acyclic at the module level.
 

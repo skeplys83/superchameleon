@@ -111,7 +111,16 @@ export function StickFigure({
             depthTest: false,
             depthWrite: false,
           })
-        : new THREE.MeshStandardMaterial({ map: skin, roughness: 0.55 });
+        : // **Matte, and it has to stay that way.** The body takes light the way
+          // the surface it is hiding against does, or the shading gives it away
+          // before the colour ever does — a body at 0.55 caught a soft sheen
+          // along every limb that the wall behind it did not. A map asks for the
+          // same treatment with `matte` in `maps.ts`, which flattens everything
+          // it loads to exactly these numbers; this is the same setting for the
+          // one thing in the scene that is not part of a map. Matched, the only
+          // thing left to tell a chameleon from a wall is the colour it painted
+          // itself — which is the whole game.
+          new THREE.MeshStandardMaterial({ map: skin, roughness: 1, metalness: 0 });
       character.mesh.material = material;
       character.mesh.renderOrder = highlight ? REVEAL_ORDER : 0;
       character.mesh.castShadow = !highlight;

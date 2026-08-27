@@ -2,8 +2,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { generateInviteLink } from "@/client/app/crazygames";
 import { DEV } from "@/client/app/dev";
 import { sendStart, type RoomInfo } from "@/client/net";
-import { DEFAULT_MATCH_MAP } from "@/shared/mapIds";
+import type { MapId } from "@/shared/mapIds";
 import { MIN_PLAYERS } from "@/shared/protocol";
+
+/**
+ * The map Quick play opens, named rather than taken from `DEFAULT_MATCH_MAP`:
+ * this button exists to get to the map being worked on, and the default is the
+ * one every build ships. Both are dev-only, so pointing it at a `DEV_ONLY_MAPS`
+ * entry is fine — the whole file is dropped from a production build.
+ */
+const QUICK_PLAY_MAP: MapId = "hospital";
 
 /** The second window is named, so pressing the button twice reuses it rather
  *  than filling the screen with tabs. */
@@ -62,7 +70,7 @@ export function useDevQuickPlay(room: RoomInfo | null) {
       // The unwrapped `create`, never the menu's: the menu's wrapper asks for an
       // ad, and an ad break here would pause the game between the two halves of
       // this flow.
-      open(DEFAULT_MATCH_MAP, false, MIN_PLAYERS);
+      open(QUICK_PLAY_MAP, false, MIN_PLAYERS);
     },
     [],
   );

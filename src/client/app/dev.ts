@@ -23,9 +23,11 @@ import { useSyncExternalStore } from "react";
  */
 export const DEV = import.meta.env.DEV;
 
-/** On by default in a dev build: the collision layer is why this exists, and a
- *  switch you have to find before you see anything is a switch nobody finds. */
-let on = DEV;
+/** Off by default, even in a dev build. The green collision layer over every
+ *  wall is what you want while hunting a hole in a map and in the way the rest
+ *  of the time — and most dev runs are the rest of the time. The DEV chip is
+ *  always drawn, so the switch is still one click away. */
+let on = false;
 const listeners = new Set<() => void>();
 
 const subscribe = (listener: () => void) => {
