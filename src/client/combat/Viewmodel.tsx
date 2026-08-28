@@ -1,8 +1,9 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import * as THREE from "three";
 import { Shotgun } from "./Shotgun";
 import { takeKick } from "./recoil";
+import { clearMuzzle, publishMuzzle } from "./muzzle";
 import { strideFor } from "@/client/sound/footsteps";
 import { walkedDistance } from "@/client/players/gait";
 import { BODY_SCALE } from "@/client/players/body";
@@ -15,6 +16,17 @@ const PUMP = new THREE.Vector3(0.16, -0.27, -0.78);
 const SHOULDER_R = new THREE.Vector3(0.34, -0.6, 0.14);
 const SHOULDER_L = new THREE.Vector3(-0.32, -0.62, 0.1);
 const ARM_RADIUS = 0.075;
+
+/**
+ * The end of the barrel, in the gun group's own axes.
+ *
+ * `Shotgun` draws its barrel 0.9 long centred at z −0.45, so the tip is at
+ * z −0.9, and the viewmodel's copy is drawn at `scale={1.1}`. An empty marker
+ * rather than a number added at the call site: it hangs inside the rig, so it
+ * picks up the recoil, the bob, the body scale and the camera for free, and it
+ * moves on its own if the gun is ever re-modelled.
+ */
+const MUZZLE = new THREE.Vector3(0, 0, -0.9 * 1.1);
 
 /**
  * The gun's two idle motions. Both are deliberately tiny: this sits a few
@@ -122,6 +134,14 @@ export function Viewmodel() {
   /** The bob's amplitude, eased so it fades in and out instead of snapping on
    *  the first and last step. */
   const swing = useRef(0);
+  /** The barrel tip, so the tracer can be drawn from the gun rather than from
+   *  the eye. See `muzzle.ts`. */
+  const muzzle = useRef<THREE.Object3D>(null);
+  const muzzleWorld = useMemo(() => new THREE.Vector3(), []);
+
+  // A chameleon has no viewmodel and a hunter in paint mode has put theirs
+  // away; either way the last barrel this published is not on screen any more.
+  useEffect(() => clearMuzzle, []);
 
   // Priority 1: after every movement callback, which is where the camera is
   // placed. Mount order cannot be relied on — `Player` is keyed on the room and
@@ -176,6 +196,11 @@ export function Viewmodel() {
     // +x pitches the muzzle up: it carries the forward axis towards +y. Nothing
     // else writes this rotation, so it can be set outright rather than composed.
     r.rotation.x = recoil.current * RECOIL_PITCH;
+
+    // After the rig is placed, so the published point carries this frame's
+    // recoil and bob rather than the last one's.
+    const tip = muzzle.current;
+    if (tip) publishMuzzle(tip.getWorldPosition(muzzleWorld));
   }, 1);
 
   return (
@@ -195,6 +220,7 @@ export function Viewmodel() {
           {/* Angled slightly inward so the barrel converges on the crosshair. */}
           <group position={GUN} rotation={[0.03, -0.06, 0]}>
             <Shotgun scale={1.1} />
+            <object3D ref={muzzle} position={MUZZLE} />
           </group>
           <Arm from={SHOULDER_R} to={GRIP} />
           <Arm from={SHOULDER_L} to={PUMP} />

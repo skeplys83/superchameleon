@@ -4,6 +4,7 @@ import { playableMaps, mapName } from "@/shared/maps";
 import { DEV } from "@/client/app/dev";
 import { MIN_PLAYERS, type Phase } from "@/shared/protocol";
 import { generateInviteLink } from "@/client/app/crazygames";
+import { BUTTON_PRIMARY, CHIP, LABEL } from "./ui";
 
 /** The waiting room's own overlay: the invite code, the map you are about to play, and Start. */
 export function LobbyPanel({
@@ -67,10 +68,10 @@ export function LobbyPanel({
   };
 
   return (
-    <div className="pointer-events-auto w-[22rem] rounded-lg border border-neutral-700 bg-neutral-950/90 px-4 py-3 text-neutral-100">
+    <div className="pointer-events-auto w-[21rem] rounded-2xl border-2 border-neutral-700 bg-neutral-950/90 px-5 py-4 text-neutral-100">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[10px] uppercase tracking-widest text-neutral-500">
+          <div className={`text-neutral-500 ${LABEL}`}>
             Invite code · {isListed ? "public" : "unlisted"}
             {isHost && (
               <span className="font-semibold text-red-400">
@@ -79,11 +80,11 @@ export function LobbyPanel({
               </span>
             )}
           </div>
-          <div className="font-mono text-2xl tracking-[0.35em]">{code}</div>
+          <div className="font-mono text-2xl font-extrabold tracking-[0.35em]">{code}</div>
         </div>
         <button
           onClick={copy}
-          className="rounded-md border border-neutral-700 px-3 py-1.5 text-xs text-neutral-300 transition hover:border-neutral-500"
+          className={`border-neutral-700 text-neutral-300 hover:border-neutral-500 ${CHIP}`}
         >
           {copied ? "Copied" : "Copy"}
         </button>
@@ -94,26 +95,26 @@ export function LobbyPanel({
           private business, and the tick everyone hears needs a number to belong
           to. */}
       <div
-        className={`mt-3 flex items-baseline justify-between rounded-md px-2.5 py-1.5 ${
+        className={`mt-3 flex items-baseline justify-between rounded-xl px-3 py-2 ${
           counting ? "bg-emerald-950/60" : "bg-neutral-900/70"
         }`}
       >
-        <span className="text-[10px] uppercase tracking-widest text-neutral-400">
+        <span className={`text-neutral-400 ${LABEL}`}>
           {counting ? "Starting" : "Waiting"}
         </span>
         <span className="flex items-baseline gap-3">
           {counting && (
-            <span className="font-mono text-xl tabular-nums text-emerald-300">
+            <span className="font-mono text-2xl font-extrabold tabular-nums text-emerald-300">
               {timeLeft}
             </span>
           )}
-          <span className="font-mono text-sm tabular-nums text-neutral-300">
+          <span className="font-mono text-base font-bold tabular-nums text-neutral-300">
             {players} / {maxPlayers}
           </span>
         </span>
       </div>
       {!counting && !roundOver && !enough && (
-        <div className="mt-1 text-[10px] leading-snug text-neutral-500">
+        <div className="mt-1.5 text-xs font-medium leading-snug text-neutral-500">
           Waiting for {MIN_PLAYERS - players} more — a round needs at least{" "}
           {MIN_PLAYERS}.
         </div>
@@ -121,20 +122,22 @@ export function LobbyPanel({
 
       {isHost ? (
         <>
-          <div className="mt-3 mb-1 flex items-baseline justify-between text-[10px] uppercase tracking-widest text-neutral-500">
+          <div
+            className={`mb-2 mt-4 flex items-baseline justify-between text-neutral-500 ${LABEL}`}
+          >
             <span>Map</span>
             {counting && <span className="text-neutral-600">locked in</span>}
           </div>
           {/* Locked once the countdown runs: everybody is already preloading
               this map, and the server refuses the change anyway. */}
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {playableMaps(DEV).map((m) => (
               <button
                 key={m.id}
                 disabled={counting}
                 onClick={() => sendMap(m.id)}
                 title={counting ? "The map is settled once the countdown starts" : m.blurb}
-                className={`rounded-md border px-2.5 py-1 text-xs transition disabled:cursor-not-allowed ${
+                className={`${CHIP} ${
                   nextMap === m.id
                     ? "border-neutral-300 bg-neutral-800 text-neutral-100"
                     : "border-neutral-700 text-neutral-400 hover:border-neutral-500 disabled:hover:border-neutral-700"
@@ -151,7 +154,7 @@ export function LobbyPanel({
             <button
               onClick={sendStart}
               disabled={!enough}
-              className="mt-3 w-full rounded-md border border-emerald-500 bg-emerald-600/20 px-4 py-2 text-sm font-medium text-emerald-200 transition hover:bg-emerald-600/40 disabled:cursor-not-allowed disabled:opacity-40"
+              className={`mt-4 w-full ${BUTTON_PRIMARY}`}
             >
               Start on {mapName(nextMap)}
             </button>
@@ -162,13 +165,9 @@ export function LobbyPanel({
           {/* The map is the one thing a non-host actually needs from this panel,
               so it gets the weight the Start button has for the host rather than
               being buried mid-sentence. */}
-          <div className="mt-3 text-[10px] uppercase tracking-widest text-neutral-500">
-            Next map
-          </div>
-          <div className="text-lg font-medium text-neutral-100">
-            {mapName(nextMap)}
-          </div>
-          <p className="mt-2 text-xs text-neutral-500">
+          <div className={`mt-4 text-neutral-500 ${LABEL}`}>Next map</div>
+          <div className="text-xl font-extrabold text-neutral-100">{mapName(nextMap)}</div>
+          <p className="mt-2 text-xs font-medium text-neutral-500">
             Waiting for the host to start. One player keeps the shotgun and the
             rest become chameleons — your paint comes with you.
           </p>

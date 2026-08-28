@@ -261,6 +261,12 @@ bpy.ops.export_scene.gltf(
     export_yup=True,
     # Export the evaluated mesh, not the pre-modifier cage.
     export_apply=True,
+    # **Bake the pose in.** This defaults to True, which writes every armature
+    # in its *rest* position on the assumption that an animation will pose it —
+    # so a map full of hand-posed figures arrived standing in the bind star.
+    # Nothing in a level is animated: the pose a figure is left in is the pose
+    # it is meant to have.
+    export_rest_position_armature=False,
     # A map with no lights arrives black.
     export_lights=True,
     export_cameras=False,

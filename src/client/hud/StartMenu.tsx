@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { fetchSessions, type Game } from "@/client/net";
 import { randomName } from "@/shared/names";
-import { mapName, type MapId } from "@/shared/maps";
-import { CreateGamePanel } from "./CreateGamePanel";
+import { DEFAULT_MATCH_MAP, mapName, type MapId } from "@/shared/maps";
+import { DEFAULT_PLAYERS } from "@/shared/protocol";
 import { MapList } from "./MapList";
 import { LegalPage } from "./LegalPage";
 import { Footer } from "./Footer";
 import { getInitialInviteRoom } from "@/client/app/crazygames";
 import { DEV } from "@/client/app/dev";
+import { BUTTON_QUIET, INPUT, LABEL } from "./ui";
 
 /** The name lives in `sessionStorage`, scoped to the tab. */
 const NAME_KEY = "mc_name";
@@ -50,8 +51,6 @@ export function StartMenu({
   const [ready, setReady] = useState(false);
   const [code, setCode] = useState(() => getInitialInviteRoom() ?? "");
   const [games, setGames] = useState<Game[]>([]);
-  /** The create modal. Map, listing and size all live inside it. */
-  const [creating, setCreating] = useState(false);
 
   useEffect(() => {
     if (input.current) input.current.value = readName() || randomName();
@@ -97,81 +96,72 @@ export function StartMenu({
 
   return (
     <div className="absolute inset-0 bg-neutral-950/90 text-neutral-100 backdrop-blur-sm">
-      {/* Centred when it fits, scrolled when it does not. `justify-center` on the
-          scroller itself clips the top of anything taller than the viewport —
-          the min-h-full inner column is what keeps both behaviours. */}
+      {/* The scroller is a plain `overflow-y-auto` around a `min-h-full` grid.
+          Centring the scroller itself clips the top of anything taller than the
+          viewport, which is the whole reason the middle column does its own
+          centring rather than this one doing it for all three. */}
       <div className="h-full overflow-y-auto">
-        <div className="flex min-h-full flex-col items-center justify-center gap-8 py-10 pb-16">
-        <div className="flex flex-col items-center gap-2">
-          <h1 className="text-3xl font-semibold tracking-tight">Super Chameleon</h1>
-          <p className="max-w-md text-center text-xs text-neutral-500">
-            Everyone waits in the arena, armed. When the host starts, one player keeps the shotgun —
-            the rest become chameleons.
-          </p>
-        </div>
-
-        <input
-          ref={input}
-          defaultValue=""
-          placeholder="Your name"
-          maxLength={16}
-          className="w-64 rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 text-center text-sm outline-none focus:border-neutral-500"
-        />
-
-        {/* A third and two thirds. Both carry a min width, so on a screen too
-            narrow to honour the split the row wraps and the page scrolls
-            rather than squeezing either side into uselessness. */}
-        <div className="flex w-full max-w-7xl flex-wrap items-stretch justify-center gap-10 px-6">
-          <div className="h-[70vh] min-h-[26rem] min-w-[20rem] grow basis-[calc(33.333%-1.25rem)]">
+        {/* **Exact thirds, and no gap on the grid.** A `gap` here would make
+            each column a third *minus* its share of it, which is the thing
+            "the map list takes the first third" stops being true of. The
+            breathing room is padding inside each column, so the outer two run
+            to the edges of the screen — and both of them start at the *top*,
+            in the corners, while only the middle is centred. */}
+        <div className="grid min-h-full w-full grid-cols-3 pb-12">
+          {/* ── Top-left: what this build ships ──────────────────────────── */}
+          <div className="flex min-h-0 min-w-0 flex-col px-6 py-6">
             <MapList />
           </div>
 
-          <div className="grid min-w-[20rem] grow basis-[calc(66.667%-1.25rem)] grid-cols-1 items-stretch gap-10 md:grid-cols-2">
-          <div className="flex flex-col gap-8">
-            {/* ── Open a game of your own ─────────────────────────────────── */}
-            <section>
-              <div className="mb-3 text-xs uppercase tracking-widest text-neutral-400">
-                Create game
-              </div>
-
-              <p className="mb-4 text-[11px] leading-relaxed text-neutral-500">
-                Pick a map, a size and whether strangers can see it. You get a code to hand out
-                either way.
+          {/* ── The middle third: the one thing this page is for ──────────── */}
+          <div className="flex min-w-0 flex-col items-center justify-center gap-4 px-6 py-10">
+            <div className="flex flex-col items-center gap-2">
+              <h1 className="text-5xl font-extrabold tracking-tight">Super Chameleon</h1>
+              <p className="max-w-md text-center text-sm font-medium text-neutral-400">
+                Everyone waits in the arena, armed. When the host starts, one player keeps the
+                shotgun — the rest become chameleons.
               </p>
+            </div>
 
-              <button
-                onClick={() => setCreating(true)}
-                disabled={!ready}
-                className="w-full rounded-lg border border-emerald-500 bg-emerald-600/20 px-6 py-3 text-sm font-medium text-emerald-200 transition hover:bg-emerald-600/40 disabled:opacity-40"
-              >
-                Create game
-              </button>
+            <input
+              ref={input}
+              defaultValue=""
+              placeholder="Your name"
+              maxLength={16}
+              className={`mt-2 w-full max-w-sm text-center ${INPUT}`}
+            />
 
-              {/* Dev builds only, and `DEV` is substituted by vite rather than
-                  read — so this button and the hook behind it are dropped from
-                  the production bundle entirely. See `app/dev.ts`. */}
-              {DEV && (
-                <>
-                  <button
-                    onClick={() => ready && onQuickPlay(takeName())}
-                    disabled={!ready}
-                    className="mt-3 w-full rounded-lg border border-amber-500/70 bg-amber-500/10 px-6 py-2.5 text-sm text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-40"
-                  >
-                    Quick play (dev)
-                  </button>
-                  <p className="mt-2 text-[11px] leading-snug text-neutral-600">
-                    Opens a second window as the other player and starts the round.
-                    The draw decides which of you gets the gun.
-                  </p>
-                </>
-              )}
-            </section>
+            {/* **No modal.** It asked three questions before anybody had seen
+                the game: the map is the host's to change in the lobby, a game
+                nobody can find is the exception rather than the rule, and the
+                size only ever mattered to somebody who already had friends
+                waiting. Straight in on the defaults. */}
+            <button
+              onClick={() =>
+                ready && onCreate(takeName(), DEFAULT_MATCH_MAP, true, DEFAULT_PLAYERS)
+              }
+              disabled={!ready}
+              // The nudge is dropped while the button does nothing — a control
+              // waving at you that it will not answer is worse than a still one.
+              className={`w-full rounded-[2rem] border-4 border-emerald-500 bg-emerald-600/25 py-10 text-4xl font-extrabold uppercase tracking-[0.15em] text-emerald-100 shadow-2xl shadow-emerald-950/60 transition hover:bg-emerald-600/45 disabled:cursor-not-allowed disabled:opacity-40 ${
+                ready ? "play-nudge" : ""
+              }`}
+            >
+              Play now
+            </button>
 
-            {/* ── Or type someone's code ──────────────────────────────────── */}
-            <section>
-              <div className="mb-3 text-xs uppercase tracking-widest text-neutral-400">
-                Join game
-              </div>
+            <p className="text-center text-sm font-medium text-neutral-500">
+              Opens a lobby straight away, public, with a code to hand out. Change the map from
+              inside it — you are the host.
+            </p>
+
+            {/* ── Under it, the other way in ─────────────────────────────────
+                Below Play now and never beside it: they are the same decision
+                asked twice, and a code box level with the button reads as an
+                equal choice when it is the exception — you only have four
+                letters if somebody handed them to you. */}
+            <section className="mt-4 w-full max-w-sm">
+              <div className={`mb-3 text-center text-neutral-300 ${LABEL}`}>Join with a code</div>
 
               <form
                 onSubmit={(e) => {
@@ -187,30 +177,51 @@ export function StartMenu({
                   placeholder="CODE"
                   maxLength={8}
                   autoComplete="off"
-                  className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-3 text-center font-mono text-xl tracking-[0.4em] outline-none focus:border-neutral-500"
+                  className={`w-full text-center font-mono text-2xl font-bold tracking-[0.4em] ${INPUT}`}
                 />
                 <button
                   type="submit"
                   disabled={!ready || !code.trim()}
-                  className="w-full rounded-lg border border-neutral-600 px-6 py-3 text-sm transition hover:border-neutral-400 disabled:opacity-40"
+                  className={`w-full ${BUTTON_QUIET}`}
                 >
                   Join
                 </button>
               </form>
-              <p className="mt-2 text-[11px] leading-snug text-neutral-600">
+              <p className="mt-2 text-center text-sm leading-snug text-neutral-600">
                 Four letters, from whoever opened the game.
               </p>
             </section>
+
+            {/* Dev builds only, and `DEV` is substituted by vite rather than
+                read — so this button and the hook behind it are dropped from
+                the production bundle entirely. See `app/dev.ts`. */}
+            {DEV && (
+              <>
+                <button
+                  onClick={() => ready && onQuickPlay(takeName())}
+                  disabled={!ready}
+                  className="mt-4 rounded-2xl border-2 border-amber-500/70 bg-amber-500/10 px-6 py-3 text-base font-bold text-amber-200 transition hover:bg-amber-500/20 disabled:opacity-40"
+                >
+                  Quick play (dev)
+                </button>
+                <p className="text-center text-sm leading-snug text-neutral-600">
+                  Opens a second window as the other player and starts the round. The draw
+                  decides which of you gets the gun.
+                </p>
+              </>
+            )}
+
+            {!ready && (
+              <p className="text-sm font-medium text-neutral-600">Looking for the game server…</p>
+            )}
           </div>
 
-          {/* ── What is open right now ────────────────────────────────────── */}
-          <div className="relative min-h-[18rem]">
-            <section className="absolute inset-0 flex min-h-0 flex-col rounded-lg border border-neutral-800 bg-neutral-900/40 p-3">
-              <div className="mb-2 flex shrink-0 items-baseline justify-between">
-                <span className="text-[11px] uppercase tracking-widest text-neutral-500">
-                  Public games
-                </span>
-                <span className="text-xs text-neutral-600">{games.length}</span>
+          {/* ── Top-right: what is open right now ─────────────────────────── */}
+          <div className="flex min-h-0 min-w-0 flex-col px-6 py-6">
+            <section className="flex min-h-0 flex-1 flex-col rounded-3xl border border-neutral-800 bg-neutral-900/40 p-4">
+              <div className="mb-3 flex shrink-0 items-baseline justify-between">
+                <span className={`text-neutral-400 ${LABEL}`}>Public games</span>
+                <span className="text-sm font-bold text-neutral-600">{games.length}</span>
               </div>
 
               <div className="min-h-0 flex-1 overflow-y-auto pr-0.5">
@@ -219,15 +230,15 @@ export function StartMenu({
                     key={g.code}
                     disabled={g.started || g.starting}
                     onClick={() => ready && onJoinCode(takeName(), g.code)}
-                    className="mb-1.5 flex w-full items-center justify-between gap-2 rounded-md border border-neutral-800 bg-neutral-900 px-3 py-2 text-left text-sm transition hover:border-neutral-600 disabled:opacity-40 disabled:hover:border-neutral-800"
+                    className="mb-2 flex w-full items-center justify-between gap-2 rounded-2xl border-2 border-neutral-800 bg-neutral-900 px-4 py-3 text-left text-base font-bold transition hover:border-neutral-600 disabled:opacity-40 disabled:hover:border-neutral-800"
                   >
                     <span className="min-w-0">
                       <span className="font-mono tracking-[0.2em] text-neutral-200">{g.code}</span>
-                      <span className="ml-2 truncate text-xs text-neutral-500">
+                      <span className="ml-2 truncate text-sm font-medium text-neutral-500">
                         {g.host ? `${g.host}'s game` : "waiting room"}
                       </span>
                     </span>
-                    <span className="shrink-0 text-xs text-neutral-500">
+                    <span className="shrink-0 text-sm font-medium text-neutral-500">
                       {mapName(g.map)} · {g.players}
                       {g.maxPlayers ? ` / ${g.maxPlayers}` : ""}
                       {g.started ? " · in play" : g.starting ? " · starting" : ""}
@@ -236,25 +247,11 @@ export function StartMenu({
                 ))}
 
                 {games.length === 0 && (
-                  <p className="px-1 pt-1 text-xs text-neutral-600">No public games right now.</p>
+                  <p className="px-1 pt-1 text-sm text-neutral-600">No public games right now.</p>
                 )}
               </div>
             </section>
           </div>
-          </div>
-        </div>
-
-        {!ready && <p className="text-xs text-neutral-600">Looking for the game server…</p>}
-
-        {creating && ready && (
-          <CreateGamePanel
-            onCancel={() => setCreating(false)}
-            onCreate={(map, listed, maxPlayers) => {
-              setCreating(false);
-              onCreate(takeName(), map, listed, maxPlayers);
-            }}
-          />
-        )}
         </div>
       </div>
 

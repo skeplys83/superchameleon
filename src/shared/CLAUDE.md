@@ -58,6 +58,10 @@ doc names the constant beside the number for exactly this reason.
   still means "is clinging"**, which is all `sound/` ever asks. It was a boolean
   until the figure needed three answers: a pose that lies flat lies flat on a
   floor *and* a ceiling, and stands up to climb a wall.
+- **`DEFAULT_PLAYERS` is the size Play now opens.** The menu stopped asking, so
+  it is what every lobby gets unless something inside one offers a choice; the
+  hard bounds `MIN_PLAYERS`/`MAX_PLAYERS` are a separate thing and still what
+  the server validates against.
 - **`names.ts` is here because both halves read it**, which is the rule for
   this folder. The client offers one in the name box; the server hands one out
   when `clean.ts` takes a name away. It moved from `client/hud/` the day the

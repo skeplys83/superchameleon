@@ -63,6 +63,12 @@ let go, because a reservation is held for only fifteen seconds.
   `sound/` still reads it as truthy-means-climbing; `figure/` reads *which*
   surface, to decide which way up to draw a pose that lies flat. It rides in the
   same `state` message as everything else, twenty times a second.
+- **`upright` rides beside it, and is a `boolean`.** It is the player's `X`
+  toggle — a pose that *could* lie flat is being held on its feet — and it is on
+  the wire for the same reason `pose` is: the pose it changes is what a
+  chameleon is hiding *as*, so everybody has to draw the same body. `remotes.ts`
+  carries it on `RemoteTarget` untouched by the interpolation, since a boolean
+  has nothing to interpolate.
 - **Chat is a broadcast, and nothing is replayed on join.** It used to be state
   precisely so a latecomer was handed the backlog; the server now keeps no copy
   at all, so a conversation exists only for whoever was in the room to hear it.

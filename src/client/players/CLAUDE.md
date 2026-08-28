@@ -13,14 +13,22 @@ climbing, and `BODY` (the collider size for each role).
 | `useStateBroadcast.ts`    | your transform, on a timer                                |
 | `useEyedropperReadback.ts`| the framebuffer reads — the click's fallback and the swatch's, at priority 3 |
 | `RemotePlayers.tsx`       | everybody else, damped toward their last packet           |
+| `poseRequest.ts`          | the one channel from the HUD's pose wheel to the body      |
 | `controls.ts` `controller.ts` `camera.ts` `cling.ts` `body.ts` `pointerLock.ts` | the pieces each of those uses |
 
 ## The two roles do not share a control scheme
 
-A **hunter** is first person and holds the pointer lock. A **chameleon** is third
-person, keeps their cursor (so the brush and palette are always to hand), looks
-around by right-dragging, turns their body with Q/E, poses with the number keys,
-and climbs. That asymmetry is the reason for most of the rules below.
+A **hunter** is first person. A **chameleon** is third person, turns their body
+with Q/E, poses with the number keys or the `R` wheel, and climbs. That
+asymmetry is the reason for most of the rules below.
+
+**Both of them hold the pointer lock.** The chameleon did not used to — the
+cursor stayed free so the brush and the palette were always to hand — but a
+walking body now turns to face the camera, which makes the camera the steering,
+and a cursor drifting into the corner of the screen is a wall you cannot look
+past. **Paint mode (`F`) is what hands the cursor back**, along with the pause
+menu and the chat box, and it is the only way to paint. `usePauseControl` owns
+that whole exchange.
 
 ## The three rules that will bite you
 
@@ -96,10 +104,17 @@ Four things do **not** follow from `BODY`, and three of them are deliberate:
   the size they were.
 - **The viewmodel** hangs off the camera, not the body, so `combat/Viewmodel.tsx`
   scales itself by `BODY_SCALE.hunter`.
-- **`SPEED`, `JUMP_SPEED`, `GRAVITY` and the camera's zoom range** are measured
-  in the world, not in bodies. Left alone on purpose: a smaller player at the
-  same speed covers the map just as fast, so the room *looks* bigger without
-  taking longer to cross. Scale them if you want the whole effect.
+- **`SPEED` is per role; `JUMP_SPEED`, `GRAVITY` and the camera's zoom range are
+  not.** Those three are measured in the world rather than in bodies, and are
+  left alone on purpose — a smaller player jumping the same height clears the
+  same crate. `SPEED` was the same way until a chameleon at two thirds a
+  hunter's height turned out to be covering nearly twice the body-lengths a
+  second: a small figure at a big figure's pace, which reads as skating and puts
+  the whole map inside a glance. It is 4.2 against the hunter's 6 — short of the
+  height ratio (~3.3), because a chameleon caught in the open still has to be
+  able to run for cover. Nothing else needs changing with it: the walk cycle's
+  phase and the footstep stepper both count *distance travelled*, so the legs
+  and the sound slow themselves.
 - **The name badge's gap** above a remote head is scaled in `RemotePlayers.tsx`,
   because it is a distance from a body rather than a distance in the room.
 
@@ -130,8 +145,59 @@ ceiling" which survived every fix to the first pass.
 It raycasts `shell` only — floor, walls, ceiling — never the furniture. See
 `world/CLAUDE.md`.
 
+## And it never rises above the roof over the player
+
+A third pass, and it is not the second one restated. The segment test can only
+refuse a seat that the **straight line from the body** actually reaches through
+something, and the hospital is roofed in patches — so a camera swinging up and
+back leaves a room through an open side and comes down on the roof next door
+with clear line of sight the whole way. Nothing was clipped; the shot was of a
+rooftop. So the roof is measured where it matters, straight up from the body,
+and becomes a ceiling for the lens too. No roof overhead, no cap.
+
+All three height clamps go through `seatAt`, which takes the lift or the drop
+out of the **horizontal** leg. Writing `settled.y` outright shortens the leg to
+the body and takes the lens off its orbit, which is the camera that further
+mouse movement could not budge.
+
 ## Contracts
 
+- **A walking chameleon turns to face the camera** (`FACE_DAMP`), and only
+  while walking. Movement has always followed the camera rather than the figure,
+  so a body left pointing wherever Q and E last put it walks sideways and
+  backwards for most of a round; standing still is when the figure is being
+  *placed*, and Q and E are what place it. The turn takes the short way round —
+  yaw is unbounded, because Q and E have been adding to it — and is damped, or
+  it reads as the camera cutting rather than the body leaning into a corner.
+- **A pose is not always something you can leave.** Lying under a bed or curled
+  into a cupboard, the box is a fraction of the standing one, and unfolding
+  would put the rest of the body through whatever is overhead. `headroom` in
+  `inside.ts` measures the clear height above the *feet* — the pose change keeps
+  the box's underside put, so the feet are what it grows from — and nothing is
+  allowed into a pose whose box does not fit: not the number keys, not the
+  wheel, and **not walking**, because `activePose` unfolds a chameleon to
+  POSES[0] to walk. Somewhere with no room to stand is somewhere with no room to
+  walk, and refusing it there is also what stops the walk cycle playing while a
+  body clips up through a mattress.
+
+  It is one ray straight up, so a beam that clears the centre and would clip a
+  shoulder is not seen. The honest alternative is a shape cast per pose per
+  frame; the cheap version is what reads as "there is a bed over me". It is
+  skipped entirely while clinging, where the box has turned to hold a wall and
+  "up" is not the direction the body would grow in.
+- **`X` decides whether a pose that can lie flat actually does**, and it is on
+  the wire. It is React state here for the same reason `surfaceKind` is — it
+  turns the pose's box and the collider is keyed on that box — it flips on the
+  key's *press* (`m.flatHeld`, the edge `jumpHeld` catches for the jump), and it
+  reaches `figure/` as one flag threaded through `flatFor`, `poseExtents` and
+  `poseCentre` together. Cosmetic but not local: what a chameleon is hiding *as*
+  cannot differ between the client drawing it and the clients hunting it.
+- **The pose has two ways in and one owner.** The number keys are polled from
+  the frame loop through drei's map; the wheel is drawn in `hud/`, which may not
+  import this folder, so it goes through `poseRequest.ts` — a request is
+  **taken**, not read, or one turn of the wheel would fight the number keys for
+  the rest of the round. `pose` itself stays React state here, because the
+  collider is keyed on its box.
 - **The eyedropper's cursor swatch is `usePointerControls`' too**, created and
   destroyed by the arming effect and moved from `onMouseMove`. **Its colour is
   the drawn pixel, not the albedo the click takes** — it answers "what am I
@@ -140,6 +206,22 @@ It raycasts `shell` only — floor, walls, ceiling — never the furniture. See
   still takes albedo, which is what makes the painted body come out that same
   brown under that same light. `useEyedropperReadback` answers a **standing**
   watch every drawn frame, since the world moves under a still cursor.
+- **Paint mode slows the body to 30%** (`PAINT_SLOWDOWN`), walking and turning
+  together off one factor so they stay in proportion — a body that crept but
+  spun would be worse to paint on than either. Painting is aiming, and at full
+  speed the smallest tap of a movement key throws the surface you were working
+  on out from under the brush. It is a slowdown and not a lock: a chameleon in
+  paint mode is standing in the open with their cursor free, and taking their
+  feet away outright is the worse trade. Note that the walk keys also *leave*
+  paint mode (`app/Game.tsx`), so in practice this is what Q and E feel like.
+- **Paint mode borrows the camera's zoom.** Entering pulls the lens in to
+  `PAINT_ZOOM` — the default 7 frames a body against the room, which is the shot
+  for hiding in it and the wrong one for painting a shoulder — and leaving hands
+  back whatever the player was looking at the room from, so the mode cannot
+  quietly redefine their camera for the rest of the round. **It only ever pulls
+  in**: somebody already closer than this chose that. `followThirdPerson` snaps
+  inwards and eases outwards, the same asymmetry the wheel has, so it reads as
+  stepping up to the body and strolling back off it.
 - **A colour is recorded as *used* when a drag begins**, from the same branch
   that starts the stroke: `rememberColor` in `paint/palette.ts` feeds the
   panel's recent row.
@@ -210,11 +292,13 @@ It raycasts `shell` only — floor, walls, ceiling — never the furniture. See
   a wall depends on which way you face — a corner reaches out by root two — and
   a hunter's collider is now sized to *hold them off* what they are searching,
   where an eye at ten centimetres beats any camouflage. The standoff has to be
-  equal in every direction. It also removes the diagonal: at `HUNTER` 0.78 the
-  body is 1.44 across against the hospital's narrowest 1.49 m doorway, and the
-  box it replaced was 1.82 corner to corner — wider than the door it was walking
-  through. **Raising `HUNTER` means widening doorways first**; past the opening a
-  kinematic body does not squeeze, it stops. A chameleon keeps the cuboid because
+  equal in every direction. It also removes the diagonal: at `HUNTER` 0.79 the
+  body is 1.45 across — 1.46 once rapier's skin is counted — against the
+  hospital's narrowest 1.49 m doorway, and the box it replaced was 1.82 corner
+  to corner, wider than the door it was walking through. **That is 1.3 cm each
+  side, and it is the ceiling: raising `HUNTER` or `BODY_SCALE.hunter` again
+  means widening the doorways first**; past the opening a kinematic body does
+  not squeeze, it stops. A chameleon keeps the cuboid because
   `figure/poses.ts` states every pose as a box.
 - **No input, no travel.** `setSlideEnabled` projects a blocked move along what
   it hit, and both holds this game applies every frame are pushes *into* a
@@ -226,6 +310,31 @@ It raycasts `shell` only — floor, walls, ceiling — never the furniture. See
   normal, walking with nothing held keeps only gravity, and a release keeps
   everything, because that push *is* the movement. The walk bob reads the
   clamped numbers too, or the gun bobs while you stand still.
+- **A chameleon walks upright, and drops back into their pose the instant they
+  stop.** `pose` is what they *chose*; `activePose` is what the body holds, and
+  it is `POSES[0]` while they are moving on the ground unclung. Everything —
+  the box, the collider key, the feet-stay-put shift, `net.pose`, the figure —
+  reads `activePose`, so this is the same change a number key makes, through
+  the same code. Walking is *asking* to walk rather than travelling, or a body
+  pressed into a wall would flop back down and rebuild its collider on every
+  doorframe; coyote time stands in for `grounded` so a step off a kerb does not
+  either.
+
+  **Getting up is delayed and sitting back down is not** (`RISE_DELAY`, 0.5s).
+  The ask is timed rather than obeyed, because on the first frame every pose was
+  one twitch of W away from being abandoned — a chameleon shuffling into place
+  against a wall popped upright and marched off. A body already holding
+  `POSES[0]` skips it entirely, which is every hunter, so nobody who is on their
+  feet pays for it. The timer is zeroed by the *ask* stopping rather than by
+  walking, so letting go for a frame costs the whole half second again, and
+  `fits(0)` is re-tested on every frame of the rise — walking under a bed
+  mid-rise never completes it.
+- **The walk phase is measured in strides off `gait.ts`**, the same odometer the
+  footstep sound is timed on, so the legs land with the steps you can hear.
+  Remote bodies have no odometer on the wire, so `RemotePlayers.tsx` keeps one
+  each off the positions it is already interpolating — horizontal only, and
+  paused while clinging or dropping faster than `AIRBORNE_DROP`, because nobody
+  else's `grounded` is on the wire either.
 - **A hunter broadcasts camera yaw, not body yaw**, so chameleons can read where
   the gun hunting them is pointed.
 ---

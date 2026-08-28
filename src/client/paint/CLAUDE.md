@@ -126,12 +126,17 @@ one number and grows the schema.
 
 ## Contracts
 
-- **The eyedropper is armed with `F` as well as with the button**, and the key
-  is `Game.tsx`'s — the click it waits for lands in the world, so reaching back
-  to the panel to arm it means looking away from the surface you wanted. The
-  arming is *derived*, not stored: `picking` is the armed flag **and** the
-  palette still being on screen, so pausing, dying or the reveal disarms it
-  rather than leaving a pick to swallow the next click.
+- **The whole of this folder lives inside paint mode, and `F` is the door.**
+  Both roles hold the pointer lock now, so there is no cursor to paint with
+  until the palette hands one back — `F` toggles it, and `Esc` and the panel's
+  own minimise close it again. Nothing here is reachable otherwise.
+- **The eyedropper is armed with `G` as well as with the button** (it was `F`,
+  which is now the mode), and the key is `Game.tsx`'s — the click it waits for
+  lands in the world, so reaching back to the panel to arm it means looking
+  away from the surface you wanted. The arming is *derived*, not stored:
+  `picking` is the armed flag **and** paint mode still being on, so pausing,
+  dying, the reveal or simply leaving paint mode disarms it rather than leaving
+  a pick to swallow the next click.
 - **The row under the wheel is a history, not a palette.** The ten fixed
   presets are gone: a preset is a guess at what somebody wants, and a chameleon
   is matching a wall, so the colour they mixed two walls ago is worth more than
@@ -165,7 +170,7 @@ one number and grows the schema.
   finer than this is `TEXTURE_SIZE`, at four times the canvas per player.
 - **The brush ring is where the eyedropper is advertised.** Hovering your own
   body is the moment somebody is thinking about colour, so the ring appearing
-  brings "F to pick a colour" with it, and the label goes the instant the pick
+  brings "G to pick a colour" with it, and the label goes the instant the pick
   is armed. It is the only place the key is named outside the panel and the
   controls legend.
 - **The click takes albedo; the cursor swatch shows the drawn pixel.** They are
@@ -186,15 +191,27 @@ one number and grows the schema.
   back. Known, acyclic.
 - **Padding the gutter is two jobs, and `PAD_TEXELS` only does the first.** The
   flood out of each dab covers bilinear and a mip level or two, which is what
-  keeps a white hairline off the seams. It cannot reach the depth a *hunter*
-  samples: at `HUNT_DPR` the figure is about sixty pixels tall against a 1024
-  atlas, so the GPU reads mip four, where one texel averages sixteen by sixteen
-  and the white gutter is most of what is in it — a body painted black came back
-  ringed in white speckle, the one artefact a blur cannot destroy. `settleGutter`
-  fills everything past the pad with the average of what is on the body, so the
-  deep mips fade a figure into itself. **It walks the whole atlas**, so `skin.ts`
-  runs it debounced after the brush stops rather than per dab, and nothing
-  depends on it having run.
+  keeps a white hairline off the seams while the brush is moving. It gets
+  nowhere near the whole gutter: the unwrap covers about a quarter of the atlas,
+  so six texels out of every island is **under a tenth** of what is off the
+  body. The rest matters because a *hunter* samples deep — at `HUNT_DPR` the
+  figure is about sixty pixels tall against a 1024 atlas, so the GPU reads mip
+  four, where one texel averages sixteen by sixteen and the gutter is most of
+  what is in it. `settleGutter` fills all of it, by **dilating**: a
+  breadth-first walk of the atlas from every covered texel at once, so each
+  gutter texel ends up the colour of the nearest texel on the body. It walks the
+  whole atlas (~15 ms), so `skin.ts` runs it debounced after the brush stops
+  rather than per dab, and nothing depends on it having run.
+- **The far gutter is a dilation, not an average, and that is the difference
+  between one-colour bodies and real ones.** It used to be filled with a single
+  average of everything painted. That is right only for a body painted all one
+  shade: a chameleon with black legs and unpainted white arms averages to pale
+  grey, so the black legs sat in a pale field, and every seam and silhouette
+  wore a thin light stripe wherever anisotropy or a mip level reached seven
+  texels off the island — the artefact that reads as "white stripes where the
+  texture is wrapped". Nearest-colour everywhere means a deep mip averages the
+  body against more of the same body.
+
 - **`MAX_STROKES`, `MAX_STROKE_LENGTH` and `MAX_STROKE_BATCH` are in
   `shared/protocol.ts`** — the server clamps against the same numbers.
 

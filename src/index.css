@@ -58,13 +58,17 @@ body {
   position: absolute;
   /* Oversized: the drift moves it by up to 13% and no edge may come into view. */
   inset: -30%;
-  opacity: 0.32;
+  /* Turned down from 0.32. The grain is a handicap, not a filter: past a
+     point it stops costing the hunter a soft edge and starts costing them the
+     room, and a screen this busy is tiring to play behind for five minutes. */
+  opacity: 0.2;
   /* Rougher than it started: a lower `baseFrequency` and two octaves instead of
      three make bigger, blockier clumps rather than a fine even mist, and the
      `feComponentTransfer` stretches them toward black and white so the speckle
-     bites instead of hazing. Tile scaled up to match, or the coarser noise would
-     just repeat sooner. */
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncG type='linear' slope='2.2' intercept='-0.6'/%3E%3CfeFuncB type='linear' slope='2.2' intercept='-0.6'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+     bites instead of hazing — though less hard than it did (2.2 / -0.6), which
+     was closer to salt and pepper than to grain. Tile scaled up to match, or
+     the coarser noise would just repeat sooner. */
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='240' height='240'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='2' stitchTiles='stitch'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncG type='linear' slope='1.7' intercept='-0.35'/%3E%3CfeFuncB type='linear' slope='1.7' intercept='-0.35'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   background-repeat: repeat;
   background-size: 240px 240px;
   animation: hunt-grain-drift 0.9s steps(1, end) infinite;
@@ -75,6 +79,37 @@ body {
    still does half the job. */
 @media (prefers-reduced-motion: reduce) {
   .hunt-grain {
+    animation: none;
+  }
+}
+
+/**
+ * Play now's nudge — see `hud/StartMenu.tsx`.
+ *
+ * **Mostly still.** Four fifths of the cycle is the identity transform and the
+ * shake is the last fifth, which is what makes it read as the button asking for
+ * attention every few seconds rather than as something vibrating on the page.
+ * `transform` only, so it is compositor-only: no layout, no paint, and it
+ * cannot move anything around it.
+ */
+@keyframes play-nudge {
+  0%, 80% { transform: rotate(0deg) scale(1); }
+  84% { transform: rotate(-1.6deg) scale(1.035); }
+  88% { transform: rotate(1.6deg) scale(1.035); }
+  92% { transform: rotate(-1deg) scale(1.02); }
+  96% { transform: rotate(0.8deg) scale(1.01); }
+  100% { transform: rotate(0deg) scale(1); }
+}
+
+.play-nudge {
+  animation: play-nudge 5s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* The same rule the grain follows: a repeating motion nobody asked for is the
+   one thing to drop when the system says to. */
+@media (prefers-reduced-motion: reduce) {
+  .play-nudge {
     animation: none;
   }
 }

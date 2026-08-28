@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { onRoster, remotes } from "@/client/net";
 import type { Role } from "@/shared/protocol";
+import { LABEL } from "./ui";
 
 /** A colour per side, and *only* a colour. */
 const MARK: Record<Role, { tone: string }> = {
@@ -21,7 +22,7 @@ function Row({
 }) {
   const mark = MARK[role] ?? MARK.chameleon;
   return (
-    <div className="flex items-baseline gap-1.5 text-neutral-300">
+    <div className="flex items-baseline gap-1.5 text-neutral-200">
       <span>{name}</span>
       {showRole && <span className={`text-[10px] ${mark.tone}`}>{role}</span>}
       {/* The only green on the row. Your name and side are read the same way as
@@ -47,8 +48,8 @@ export function PlayerList({
   useEffect(() => onRoster(setIds), []);
 
   return (
-    <div className="pointer-events-none absolute left-4 top-4 select-none rounded-lg bg-black/55 px-4 py-3 font-mono text-xs text-neutral-100 backdrop-blur">
-      <div className="mb-1 text-[11px] uppercase tracking-widest text-neutral-400">
+    <div className="pointer-events-none absolute left-4 top-4 select-none rounded-xl bg-black/60 px-4 py-3 font-mono text-sm font-bold text-neutral-100 backdrop-blur">
+      <div className={`mb-2 text-neutral-400 ${LABEL}`}>
         In this game · {ids.length + 1}
       </div>
 

@@ -28,13 +28,14 @@ import {
 import { BODY, GRAVITY } from "./body";
 import { characterController } from "./controller";
 import { newMotion } from "./look";
-import { keepInside, pushInside } from "./inside";
-import { addWalked } from "./gait";
+import { headroom, keepInside, pushInside } from "./inside";
+import { addWalked, walkedDistance } from "./gait";
+import { reportPose, takePoseRequest } from "./poseRequest";
 import { usePointerControls } from "./usePointerControls";
 import { useEyedropperReadback } from "./useEyedropperReadback";
 import { useStateBroadcast } from "./useStateBroadcast";
 import { CLING_NONE, type Role } from "@/shared/protocol";
-import { POSES, poseCentre, poseExtents } from "@/client/figure/poses";
+import { POSES, poseCentre, poseExtents, safePose } from "@/client/figure/poses";
 import { DEV, reportPlayer } from "@/client/app/dev";
 import { ROOM_SURFACE } from "@/client/world/Room";
 import { surfaceRevision } from "@/client/world/surface";
@@ -44,7 +45,21 @@ import { type Brush } from "@/client/paint/brush";
 import { playSound } from "@/client/sound/engine";
 import { Stepper, jitteredStepRate, strideFor } from "@/client/sound/footsteps";
 
-const SPEED = 6;
+/**
+ * Ground speed, in units per second, per role.
+ *
+ * **A chameleon is slower than a hunter, and that is the only asymmetry in the
+ * movement.** They are two thirds the hunter's height (`BODY_SCALE`), so at a
+ * shared speed they covered nearly twice as many body-lengths a second — a
+ * small figure moving at a big figure's pace, which read as skating and made
+ * every hiding place reachable in the time it took to look at two. The walk
+ * cycle and the footsteps both come off distance travelled rather than off this
+ * number, so lowering it slows the legs and the sound to match on its own.
+ *
+ * Not scaled all the way down to the height ratio (which would be ~3.3): a
+ * chameleon caught in the open still has to be able to break for cover.
+ */
+const SPEED: Record<Role, number> = { hunter: 6, chameleon: 4.2 };
 /** A velocity, not an impulse. Read with `GRAVITY`, which is what decides how
  *  long the arc lasts and therefore how far it carries. */
 const JUMP_SPEED = 10;
@@ -71,6 +86,47 @@ const CUT_GRAVITY = 2.2;
  *  slope being climbed. A share of what was asked for. */
 const HEAD_BUMP = 0.4;
 const TURN_SPEED = 2.6; // rad/s for Q/E
+/**
+ * What is left of `SPEED` and `TURN_SPEED` while the palette is up.
+ *
+ * Painting is aiming: the brush is a ring a few centimetres across on a body
+ * that fills part of the screen, and at full speed the smallest tap of a
+ * movement or turn key throws the surface you were working on out from under
+ * the cursor. Slowed, the same keys become the nudge they need to be —
+ * shuffling round the body to reach its other side, rather than travelling.
+ *
+ * It is not a lock. A chameleon in paint mode is standing in the open with
+ * their cursor free, and taking their feet away entirely would be a worse trade
+ * than making them slow.
+ */
+const PAINT_SLOWDOWN = 0.3;
+/** How fast a walking body swings round to face where it is going. Damping
+ *  rather than a snap: a body that turns in one frame reads as the camera
+ *  cutting, and a chameleon rounding a corner should lean into it. */
+const FACE_DAMP = 7;
+/**
+ * How long a movement key has to be held before a posed chameleon gets up.
+ *
+ * Standing up out of a pose used to happen on the first frame a key went down,
+ * which made every pose one twitch of W away from being abandoned — a chameleon
+ * nudging themselves into place against a wall popped upright and started
+ * marching. Half a second is long enough that it reads as a decision and short
+ * enough that it never feels like the controls are lagging.
+ *
+ * **It is only the way *out* of a pose.** A body already standing — every
+ * hunter, and a chameleon holding POSES[0] — walks on the frame the key goes
+ * down, and stopping still drops back into the pose instantly. The delay is on
+ * unfolding, which is the part that takes a moment in life too.
+ */
+const RISE_DELAY = 0.5;
+const TAU = Math.PI * 2;
+
+/** The shortest way round from `from` to `to`, in radians. Yaw is unbounded —
+ *  Q and E have been adding to it all round — so the naive difference can be
+ *  several turns and would spin the body the long way. */
+function shortestTurn(from: number, to: number) {
+  return (((to - from + Math.PI) % TAU) + TAU) % TAU - Math.PI;
+}
 
 /** Thickness of the hover ring in world units — constant, so the outline does
  *  not thin out or fatten as the brush grows. Thin on purpose: the ring's
@@ -116,7 +172,6 @@ export function Player({
   onBrush,
   picking = false,
   onPicked,
-  onHoverBody,
 }: {
   role: Role;
   /** Where this map puts a body. Must be a stable array — see `SPAWN`. */
@@ -132,8 +187,6 @@ export function Player({
   /** The eyedropper is armed: the next left click takes a colour off the screen. */
   picking?: boolean;
   onPicked?: (hex: string) => void;
-  /** Fires when the cursor moves on or off your own body. */
-  onHoverBody: (hovering: boolean) => void;
 }) {
   const body = useRef<RapierRigidBody>(null);
   const collider = useRef<RapierCollider>(null);
@@ -157,6 +210,7 @@ export function Player({
     pitch: 0,
     pose: 0,
     cling: CLING_NONE,
+    upright: false,
   });
 
   const solids = useRef<THREE.Object3D[]>([]);
@@ -166,7 +220,18 @@ export function Player({
   /** Which version of the world `solids` was collected from. -1 forces a first
    *  pass on the very first frame. */
   const solidsRevision = useRef(-1);
+  /** The pose the player has *chosen*. What the body is actually holding is
+   *  `activePose`, which stands them up to walk. */
   const [pose, setPose] = useState(0);
+  /** Walking on the ground, unclung. React state rather than a frame-loop local
+   *  for the same reason `surfaceKind` is: it can change the pose, and the
+   *  collider is keyed on the pose's box. */
+  const [walking, setWalking] = useState(false);
+  /** **X: keep a pose that could lie flat on its feet instead.** Off is lying,
+   *  which is the game's default and what every pose was fitted for. React
+   *  state, and for the same reason `surfaceKind` is: it turns the pose's box,
+   *  and the collider is keyed on that box. */
+  const [upright, setUpright] = useState(false);
   /** What the body is stuck to. React state rather than a frame-loop local
    *  because the collider is keyed on the pose's box, and a pose that lies flat
    *  gets a different box standing up — so a cling has to re-render. */
@@ -176,6 +241,31 @@ export function Player({
    *  yours lives here because this is the only place that knows you are on the
    *  ground — nobody else's `grounded` is on the wire. */
   const stepper = useRef(new Stepper(strideFor(role)));
+
+  /**
+   * **A chameleon walks upright and drops back into their pose the moment they
+   * stop.** A body lying flat has no legs to walk on, and a pose is a thing you
+   * hold still in — so moving off overrides the choice rather than replacing
+   * it, and `pose` is still whatever they last pressed when they stand still
+   * again. A hunter never leaves POSES[0] anyway.
+   *
+   * It is the same change pressing a number key makes, through the same code:
+   * the box, the collider, the feet-stay-put shift and `net.pose` all follow
+   * from this one value.
+   */
+  const activePose = role === "chameleon" && walking ? 0 : pose;
+
+  /** How far through the walk cycle the legs are, in radians. **One footfall is
+   *  half a cycle**, and it is measured in strides off the same odometer the
+   *  footstep sound is timed on — so the legs land with the steps you can hear
+   *  by construction, and stop dead in mid-air rather than being carried along
+   *  by a fall. See `gait.ts` and `sound/footsteps.ts`. */
+  const stride = strideFor(role);
+  const gaitPhase = () => (walkedDistance() / stride) * Math.PI;
+
+  // Published for the pose wheel, which opens with the pose you are holding
+  // already lit. See `poseRequest.ts`.
+  useEffect(() => reportPose(pose), [pose]);
 
   const [, getKeys] = useKeyboardControls<Control>();
   const { scene } = useThree();
@@ -201,8 +291,7 @@ export function Player({
     frozen,
     picking,
     onPicked,
-    onHoverBody,
-    visual,
+      visual,
     ring,
     solids,
   });
@@ -248,9 +337,9 @@ export function Player({
     /** Each pose carries its own box (see poseExtents), stated in world axes —
      *  so `[1]` is its vertical half-extent whatever the pose is doing, and the
      *  whole triple is what cling has to probe with. */
-    const poseHalf = poseExtents(pose, [hx, hy, hz], surfaceKind);
+    const poseHalf = poseExtents(activePose, [hx, hy, hz], surfaceKind, upright);
     const half = poseHalf[1];
-    const centre = poseCentre(pose, hy, surfaceKind);
+    const centre = poseCentre(activePose, hy, surfaceKind, upright);
     const foot = centre[1] - half;
     if (surfaceKind !== m.surface) {
       // **The box turned because the surface changed, not because the pose
@@ -291,22 +380,55 @@ export function Player({
     // with space still nominally "held" swallows the first jump.
     if (!view.focused) m.jumpHeld = false;
 
+    // **How much room there is to stand up in.** A pose is not always something
+    // you can leave: lying under a bed or curled into a cupboard, the box is a
+    // fraction of the standing one, and unfolding would put the rest of the body
+    // through whatever is overhead. Measured from the feet, because a pose
+    // change keeps the *underside* of the box put.
+    //
+    // Not measured while clinging: the box has turned to hold a wall and "up"
+    // is no longer the direction the body would grow in.
+    // `m.cling` is last frame's, which is all there is this early in the loop —
+    // and a frame's lag on "am I on a wall" is not something a pose change feels.
+    const clear = m.cling ? Infinity : headroom(bodyPos, bodyPos.y + foot, solids.current);
+    /** Whether pose `i` would fit where the body is. */
+    const fits = (i: number) =>
+      poseExtents(i, [hx, hy, hz], surfaceKind, upright)[1] * 2 <= clear;
+
     // Poses are a chameleon's whole game. A hunter hunts upright and never leaves
     // POSES[0], so the number keys simply are not theirs.
+    // Drained whoever we are, so a request made a moment before the draw made
+    // us a hunter cannot sit here and fire at the start of the next round.
+    const wheeled = takePoseRequest();
     if (role === "chameleon") {
       for (let i = 0; i < POSES.length; i++) {
-        if (keys[poseControl(i)] && pose !== i) {
+        if (keys[poseControl(i)] && pose !== i && fits(i)) {
           setPose(i);
           break;
         }
       }
+      // The wheel is the other way in, and it arrives from the HUD rather than
+      // from a key drei is watching. Second, so a number key pressed in the
+      // same frame is not overridden by a stale wheel.
+      if (wheeled !== null && wheeled !== pose && fits(safePose(wheeled))) {
+        setPose(safePose(wheeled));
+      }
+      // On the press, not on the hold — the same edge `jumpHeld` catches, or a
+      // key held for a tenth of a second flips the body five times.
+      if (keys.flatToggle && !m.flatHeld) setUpright((u) => !u);
     }
+    m.flatHeld = keys.flatToggle;
 
     // Movement follows where you are looking, not where the figure faces.
     const y = view.yaw;
 
+    // Both of these are slowed while the palette is up — see `PAINT_SLOWDOWN`.
+    // One factor rather than two, so walking and turning stay in proportion:
+    // a body that crept but spun would be worse to paint on than either.
+    const pace = painting ? PAINT_SLOWDOWN : 1;
+
     if (role === "chameleon") {
-      m.bodyYaw += (Number(keys.turnLeft) - Number(keys.turnRight)) * TURN_SPEED * delta;
+      m.bodyYaw += (Number(keys.turnLeft) - Number(keys.turnRight)) * TURN_SPEED * pace * delta;
     } else if (firstPerson) {
       m.bodyYaw = y;
     }
@@ -317,7 +439,7 @@ export function Player({
       .set(0, 0, 0)
       .addScaledVector(forward, Number(keys.forward) - Number(keys.backward))
       .addScaledVector(right, Number(keys.right) - Number(keys.left));
-    if (move.lengthSq() > 0) move.normalize().multiplyScalar(SPEED);
+    if (move.lengthSq() > 0) move.normalize().multiplyScalar(SPEED[role] * pace);
 
     if (m.reclingGrace > 0) m.reclingGrace -= delta;
     if (m.coyote > 0) m.coyote -= delta;
@@ -478,6 +600,50 @@ export function Player({
     // is: falling is not walking.
     if (!clinging && m.grounded) addWalked(Math.hypot(moveX, moveZ));
 
+    // Walking is *asking* to walk, not travelling: a body pressed into a wall
+    // has stopped moving and has plainly not stopped walking, and a pose that
+    // flickered back on every doorframe would rebuild the collider each time.
+    // Coyote time stands in for `grounded` so a step down a stair or off a kerb
+    // is not read as leaving the ground either.
+    //
+    // **And walking is standing up.** `activePose` unfolds a chameleon to
+    // POSES[0] to walk, so somewhere with no room to stand is somewhere with no
+    // room to walk — without this, a movement key under a bed unfolds the body
+    // straight through it, and the walk cycle plays while it happens.
+    const wantsWalk =
+      !clinging && (m.grounded || m.coyote > 0) && move.lengthSq() > 0 && fits(0);
+
+    // **Getting up takes a moment; sitting back down does not.** The ask is
+    // timed rather than obeyed, so a pose survives a nudge of the movement
+    // keys — see `RISE_DELAY`. `pose === 0` is already on its feet and has
+    // nothing to unfold, which is every hunter and a chameleon who chose to
+    // stand. The timer is zeroed by the ask stopping, not by walking, so
+    // letting go for a frame costs the whole half second again; and `fits(0)`
+    // is re-tested every frame of it, so walking under a bed mid-rise simply
+    // never completes it.
+    m.unfolding = wantsWalk ? m.unfolding + delta : 0;
+    const nowWalking = wantsWalk && (pose === 0 || m.unfolding >= RISE_DELAY);
+    if (nowWalking !== walking) setWalking(nowWalking);
+
+    // **A walking chameleon faces where it is going, not where it is looking.**
+    // Movement has always followed the camera rather than the figure, so a body
+    // left pointing wherever Q and E last put it walks sideways and backwards
+    // for most of a round. Facing the *camera* was the first cut of this and
+    // was wrong by exactly the strafe keys: A walked you left while the figure
+    // marched forward. `move` is already the world direction being asked for,
+    // so the heading is read straight off it — and because it is camera-
+    // relative, turning the camera mid-walk turns the body after it.
+    //
+    // Only while walking: standing still is when the figure is being *placed*,
+    // and Q and E are what place it. A hunter faces their camera every frame,
+    // above, and has no strafe to be wrong about.
+    if (role === "chameleon" && nowWalking) {
+      // A yaw of `b` points along (-sin b, 0, -cos b), which is what the visual
+      // group and the camera's own forward are both built from.
+      const heading = Math.atan2(-move.x, -move.z);
+      m.bodyYaw += shortestTurn(m.bodyYaw, heading) * (1 - Math.exp(-FACE_DAMP * delta));
+    }
+
     // Stop accumulating downward speed the moment the floor is under us, or a
     // long fall leaves `vy` at -40 and the first step off a kerb is a plummet.
     if (m.grounded && m.vy < 0) m.vy = 0;
@@ -518,11 +684,14 @@ export function Player({
     // the gun hunting them is pointed.
     net.yaw = m.bodyYaw;
     net.pitch = role === "hunter" ? view.pitch : 0;
-    net.pose = pose;
+    net.pose = activePose;
     // Sent so other clients can keep a climber's footsteps quiet — their
     // stepper only sees a position, and sliding along a wall looks like
     // walking — and so they know which way up to draw a pose that lies flat.
     net.cling = surface;
+    // Cosmetic, but not local: the pose it changes is what a chameleon is
+    // hiding as, so everybody has to draw the same body.
+    net.upright = upright;
 
     const cp = Math.cos(view.pitch);
     lookDir.set(-Math.sin(y) * cp, Math.sin(view.pitch), -Math.cos(y) * cp);
@@ -544,8 +713,8 @@ export function Player({
         clinging,
         zoom: view.zoom,
         firstPerson,
-        pose,
-        half: poseExtents(pose, [hx, hy, hz], surfaceKind),
+        pose: activePose,
+        half: poseExtents(activePose, [hx, hy, hz], surfaceKind, upright),
         surfaces: solids.current.length,
       });
     }
@@ -602,18 +771,25 @@ export function Player({
             // `args` is read once, at creation, so a pose with a different box
             // needs a new collider — but only when the numbers actually differ,
             // or standing still and pressing 1 then 3 would rebuild it for nothing.
-            key={poseExtents(pose, [hx, hy, hz], surfaceKind).join()}
+            key={poseExtents(activePose, [hx, hy, hz], surfaceKind, upright).join()}
             ref={collider}
-            args={poseExtents(pose, [hx, hy, hz], surfaceKind)}
+            args={poseExtents(activePose, [hx, hy, hz], surfaceKind, upright)}
             // Only until the first frame loop turns it into the body's yaw.
-            position={[...poseCentre(pose, hy, surfaceKind)]}
+            position={[...poseCentre(activePose, hy, surfaceKind, upright)]}
           />
         )}
         <group ref={visual}>
           {/* In first person the camera sits inside the head, so the hunter's
               own figure is hidden and the viewmodel stands in for it. */}
           {!firstPerson && (
-            <StickFigure scale={hy} pose={pose} surface={surfaceKind} skinId={SELF} />
+            <StickFigure
+              scale={hy}
+              pose={activePose}
+              surface={surfaceKind}
+              skinId={SELF}
+              gait={gaitPhase}
+              upright={upright}
+            />
           )}
         </group>
       </RigidBody>

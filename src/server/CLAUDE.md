@@ -78,6 +78,10 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
 - **`cling` is a surface, not a flag** — `CLING_NONE` / `CLING_WALL` /
   `CLING_CEILING` from `shared/`. Clamped like every other number off the wire
   and forced to `CLING_NONE` for a hunter, because clinging silences footsteps.
+- **`upright` is taken as `msg.upright === true`**, never cast. It is the only
+  boolean in `state`, and a cast would let a string, a number or an absent field
+  through as truthy — anything that is not the word `true` is a body that lies
+  flat, which is the default the poses were fitted for.
 - **Every message name comes from `MESSAGES` in `shared/protocol.ts`**, never a
   string literal. `messages.ts` and `room.ts` both destructure it
   (`const { toServer, toClient } = MESSAGES`). The names themselves are the one

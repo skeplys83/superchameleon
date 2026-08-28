@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import type { Character } from "./model";
+import type { Joint, Pose } from "./poses";
 
 /** Writing a pose onto the skeleton. Kept apart from `StickFigure` because it
  *  is the one piece of this folder with no React in it, which is what lets it
@@ -102,6 +103,98 @@ export function makeAngles() {
     kneeY: [0, 0],
     kneeZ: [0, 0],
   };
+}
+
+/**
+ * The angles a pose *asks* for — its whole row, spread across both sides, with
+ * no damping and no aiming arm.
+ *
+ * **Kept here rather than inside `StickFigure`'s frame loop** so that anything
+ * measuring a posed body — `test/posedBounds.test.ts` fits every pose's
+ * collider against the real mesh — poses it exactly the way the game draws it.
+ * The two used to be the same code written twice, and a table measured against
+ * a different mapping than the one on screen is worse than no measurement.
+ *
+ * `spread` and `twist` are stated *outward* per side, so they are mirrored;
+ * `x` is not, because forward is forward for both.
+ */
+export function poseTargets(p: Pose, out: Angles) {
+  const lean = (j: Joint, of: "torso" | "chest" | "neck" | "head") => {
+    out[`${of}X`] = j.x;
+    out[`${of}Y`] = j.twist;
+    out[`${of}Z`] = j.spread;
+  };
+  lean(p.torso, "torso");
+  lean(p.chest, "chest");
+  lean(p.neck, "neck");
+  lean(p.head, "head");
+  out.rootX = p.rootX;
+  out.offsetY = p.offsetY;
+  out.offsetZ = p.offsetZ;
+
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? -1 : 1;
+    const of = i === 0 ? "left" : "right";
+    const clavicle = p.clavicle[of];
+    const shoulder = p.shoulder[of];
+    const elbow = p.elbow[of];
+    out.clavicleX[i] = clavicle.x;
+    out.clavicleY[i] = clavicle.twist * side;
+    out.clavicleZ[i] = clavicle.spread * side;
+    out.shoulderX[i] = shoulder.x;
+    out.shoulderY[i] = shoulder.twist * side;
+    out.shoulderZ[i] = shoulder.spread * side;
+    out.elbowX[i] = elbow.x;
+    out.elbowY[i] = elbow.twist * side;
+    out.elbowZ[i] = elbow.spread * side;
+    out.hipX[i] = p.hip.x;
+    out.hipY[i] = p.hip.twist * side;
+    out.hipZ[i] = p.hip.spread * side;
+    out.kneeX[i] = p.knee.x;
+    out.kneeY[i] = p.knee.twist * side;
+    out.kneeZ[i] = p.knee.spread * side;
+  }
+}
+
+/** Ease every angle toward a target, in place. One `MathUtils.damp` per number,
+ *  which is exactly what the frame loop used to spell out field by field. */
+export function dampAngles(a: Angles, target: Angles, lambda: number, delta: number) {
+  const dst = a as unknown as Record<string, number | number[]>;
+  const src = target as unknown as Record<string, number | number[]>;
+  for (const key in dst) {
+    const to = src[key];
+    if (typeof to === "number") {
+      dst[key] = THREE.MathUtils.damp(dst[key] as number, to, lambda, delta);
+    } else {
+      const pair = dst[key] as number[];
+      pair[0] = THREE.MathUtils.damp(pair[0], to[0], lambda, delta);
+      pair[1] = THREE.MathUtils.damp(pair[1], to[1], lambda, delta);
+    }
+  }
+}
+
+/**
+ * Copy every angle across, in place.
+ *
+ * The walk cycle is added onto a *copy* of the damped angles, never onto the
+ * angles themselves: those are the damper's own state, and a swing written
+ * back into them is one the next frame eases away from — which smears the
+ * cycle into a slow lean instead of playing it. Two `Angles` per figure and a
+ * flat copy each frame is the cheap half of that trade.
+ */
+export function copyAngles(from: Angles, to: Angles) {
+  const src = from as unknown as Record<string, number | number[]>;
+  const dst = to as unknown as Record<string, number | number[]>;
+  for (const key in src) {
+    const v = src[key];
+    if (typeof v === "number") {
+      dst[key] = v;
+    } else {
+      const pair = dst[key] as number[];
+      pair[0] = v[0];
+      pair[1] = v[1];
+    }
+  }
 }
 
 export type Chain = ReturnType<typeof buildChain>;

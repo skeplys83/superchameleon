@@ -409,6 +409,39 @@ cross-section, and take the highest slice still above a fraction (~25%) of the
 widest. Thin decoration falls away; the body survives. This needs no per-asset
 tuning and is stable across a whole pack.
 
+### Inset a prop you are meant to hide *against*
+
+A collider that stops the player at the wood is a prop you stand next to. A
+chameleon presses into scenery and the figure is deliberately much wider than
+its own collider — that gap is the hiding mechanic (`players/body.ts`) — so a
+prop worth hiding against gives some of it back and is **inset from its own
+surface**.
+
+**The two horizontal axes are not the same, and insetting them equally is the
+mistake.** What a body presses into is the prop's *front*, which is its shorter
+horizontal axis; the sides are only where the wood ends. Pull those in and the
+cabinet is visibly hollow at the ends while nobody hides any better. Read which
+axis is which off the mesh rather than assuming it — the models in a pack do
+not agree on which way round they were built.
+
+**A little goes a long way, and it is easy to overshoot.** The hospital's
+cabinets settled at **0.07 m on the depth, 0.03 on the sides, 0.04 off the
+top** and **nothing off the bottom** — a collider lifted clear of the floor is a
+cabinet you can walk under. The first pass took 0.10 on every horizontal side
+and read as a cabinet with no ends. Cap each inset at a share of the half-extent
+too — ~22% on the depth, ~10% on the sides — or a shallow prop is inset into
+nothing.
+
+The three cabinet meshes carry two custom properties: `collider_inset`, which
+is the record and what stops a second pass insetting them twice, and
+`collider_original`, the extents before any of it. **Keep that second one.**
+Retuning the numbers is otherwise an exercise in inverting the transform you
+applied last time, which works but has to be right first go.
+
+Not every prop wants this. It is for the tall flat-fronted things somebody would
+actually stand against — cabinets, wardrobes, screens — and not for what you
+walk round.
+
 ### The shapes that are not hulls
 
 - **Tables are a slab at the top.** A thin box spanning only the vertices at

@@ -1,5 +1,6 @@
 import type { Grave } from "@/client/net";
 import type { Role } from "@/shared/protocol";
+import { LABEL, PANEL } from "./ui";
 
 /** The thirty seconds after a round is decided. */
 export function RoundOverPanel({
@@ -22,9 +23,11 @@ export function RoundOverPanel({
   const won = winner !== "" && (hunters ? role === "hunter" : role === "chameleon");
 
   return (
-    <div className="pointer-events-none absolute left-1/2 top-4 w-[24rem] max-w-[90vw] -translate-x-1/2 rounded-xl border border-white/15 bg-neutral-950/85 px-6 py-4 text-neutral-100 shadow-2xl shadow-black/50 backdrop-blur">
+    <div
+      className={`pointer-events-none absolute left-1/2 top-4 w-[23rem] max-w-[90vw] -translate-x-1/2 px-6 py-5 text-neutral-100 ${PANEL}`}
+    >
       <div
-        className={`text-center text-xl font-semibold tracking-tight ${
+        className={`text-center text-2xl font-extrabold tracking-tight ${
           hunters ? "text-rose-300" : "text-emerald-300"
         }`}
       >
@@ -34,7 +37,7 @@ export function RoundOverPanel({
             ? "Hunters win"
             : "Chameleons win"}
       </div>
-      <div className="mt-0.5 text-center text-[11px] text-neutral-400">
+      <div className="mt-1.5 text-center text-xs font-medium text-neutral-400">
         {winner === ""
           ? " "
           : hunters
@@ -47,7 +50,7 @@ export function RoundOverPanel({
         )}
       </div>
 
-      <div className="mt-4 mb-1 text-[10px] uppercase tracking-widest text-neutral-500">
+      <div className={`mb-2 mt-5 text-neutral-500 ${LABEL}`}>
         {graves.length ? `Found · ${graves.length}` : "Nobody was found"}
       </div>
       {/* Capped and scrollable: twelve players is twelve rows, and the panel
@@ -56,19 +59,21 @@ export function RoundOverPanel({
         {graves.map((g, i) => (
           <div
             key={g.id}
-            className="flex items-baseline justify-between border-b border-white/5 py-1 text-xs last:border-0"
+            className="flex items-baseline justify-between border-b border-white/5 py-1 text-sm font-bold last:border-0"
           >
-            <span className="text-neutral-300">{g.name}</span>
-            <span className="font-mono text-[10px] text-neutral-600">
+            <span className="text-neutral-200">{g.name}</span>
+            <span className="font-mono text-xs text-neutral-600">
               #{i + 1}
             </span>
           </div>
         ))}
       </div>
 
-      <div className="mt-4 text-center text-[11px] text-neutral-500">
+      <div className="mt-4 text-center text-xs font-medium text-neutral-500">
         Back to the lobby in{" "}
-        <span className="font-mono tabular-nums text-neutral-300">{seconds}</span>
+        <span className="font-mono text-base font-bold tabular-nums text-neutral-200">
+          {seconds}
+        </span>
       </div>
     </div>
   );

@@ -33,10 +33,9 @@ describe("a pose that lies flat", () => {
     }
   });
 
-  it("stands a `back` pose's box up the moment it holds on", () => {
+  it("stands a `back` pose's box up for a wall, and only for a wall", () => {
     const REACH = POSES.findIndex((p) => p.key === "reach");
     const standing = poseExtents(REACH, BODY, CLING_WALL);
-    expect(poseExtents(REACH, BODY, CLING_CEILING)).toEqual(standing);
 
     // On the floor it lies down — which now means *only* going short, never
     // long. Lying is what makes the body low, not what makes it wide.
@@ -44,6 +43,26 @@ describe("a pose that lies flat", () => {
     expect(lying[1]).toBeLessThan(standing[1]);
     expect(lying[0]).toBeCloseTo(standing[0]);
     expect(lying[2]).toBeCloseTo(standing[2]);
+
+    // And a ceiling is lain against exactly as a floor is.
+    expect(poseExtents(REACH, BODY, CLING_CEILING)).toEqual(lying);
+  });
+
+  it("stands every box up for the X toggle, on every surface", () => {
+    const REACH = POSES.findIndex((p) => p.key === "reach");
+    for (const pose of [REACH, LIE]) {
+      const standing = poseExtents(pose, BODY, CLING_WALL, true);
+      for (const surface of [CLING_NONE, CLING_WALL, CLING_CEILING]) {
+        expect(poseExtents(pose, BODY, surface, true), `${pose} ${surface}`).toEqual(standing);
+        expect(poseCentre(pose, 1, surface, true), `${pose} ${surface}`).toEqual(
+          poseCentre(pose, 1, CLING_WALL, true),
+        );
+      }
+    }
+    // And it is a real difference for a pose that would otherwise lie down.
+    expect(poseExtents(LIE, BODY, CLING_NONE, true)).not.toEqual(
+      poseExtents(LIE, BODY, CLING_NONE),
+    );
   });
 
   it("leaves a pose that does not roll alone on every surface", () => {

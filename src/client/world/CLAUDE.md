@@ -16,6 +16,31 @@ reads them too. This folder is the three.js half.
 | `levelScene.ts`  | `prepareLevel` / `checkLevel`: what is read out of the file  |
 | `surface.ts`     | `ROOM_SURFACE`, and the revision counter that says it changed |
 | `preload.ts`     | fetching a map before anybody needs it                       |
+| `MapWarmer.tsx`  | uploading its textures to the GPU before anybody stands on it |
+
+## Fetching a map is only half of getting it ready
+
+`preload.ts` downloads and parses the `.glb`; the images are decoded by the end
+of it. **But a texture does not reach the GPU until the first frame that draws
+it**, and that upload — with its mipmap generation — is synchronous. The
+hospital carries 46 images, twenty-seven of them 2048² and three 4096²: **177
+megapixels, about 900 MB of video memory**, all of it landing on one frame.
+
+Chameleons pay that when they are moved to the map at the start of hiding, where
+nobody notices. **The hunter pays it at the bell**, which is the one moment in a
+round nobody will wait through — that is the "the whole game lags for a few
+hundred milliseconds" report, and it was never the network.
+
+`MapWarmer` pays it in the lobby instead, one texture a frame, off the map the
+room is *about* to play. One per frame because a single 4096² is already tens of
+milliseconds and the point is not to move the hitch; a lobby has thousands of
+frames and there are 46 textures to get through. It suspends on its own
+`Suspense` — anything else inside that boundary would blank the room the player
+is standing in while a file they are not yet using arrives.
+
+**The real fix is upstream and is not code.** 177 megapixels is an enormous
+budget for a low-poly hospital, and it costs download, decode and video memory
+on every client whatever this does. Halving the 2048s would quarter it.
 
 ## A map is one `.glb`, and this repo has no part in making one
 

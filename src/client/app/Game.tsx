@@ -21,6 +21,7 @@ import { PhaseBanner } from "@/client/hud/PhaseBanner";
 import { HuntVision } from "@/client/hud/HuntVision";
 import { RoundOverPanel } from "@/client/hud/RoundOverPanel";
 import { DebugPanel } from "@/client/hud/DebugPanel";
+import { PoseWheel } from "@/client/hud/PoseWheel";
 import { DEV } from "@/client/app/dev";
 import {
   createLobby,
@@ -32,6 +33,8 @@ import {
 } from "@/client/net";
 import { clearSkin, forgetAllSkins, SELF } from "@/client/paint/skin";
 import { cancelLock } from "@/client/players/pointerLock";
+import { currentPose, requestPose } from "@/client/players/poseRequest";
+import { controlMap } from "@/client/players/controls";
 import { stopAllLoops, unlockAudio } from "@/client/sound/engine";
 import type { Role } from "@/shared/protocol";
 import {
@@ -52,6 +55,17 @@ import {
 
 import Scene from "./Scene";
 
+/**
+ * Every key that means "walk", taken from the one map that already names them —
+ * `players/controls.ts` — rather than written out again here. Adding a movement
+ * key there is enough; nothing has to remember to add it twice.
+ */
+const WALK_KEYS = new Set(
+  controlMap
+    .filter(({ name }) => ["forward", "backward", "left", "right"].includes(name))
+    .flatMap(({ keys }) => keys ?? []),
+);
+
 export function Game() {
   /** Whether this client is in a game at all. Not the same question as which
    *  side it is on, which only the room can answer. */
@@ -68,6 +82,10 @@ export function Game() {
    *  the only state where the game on screen is not connected to anything. */
   const [dropped, setDropped] = useState(false);
   const [room, setRoom] = useState<RoomInfo | null>(null);
+  /** The pose wheel is up. Not one of `usePauseControl`'s three overlays — it
+   *  keeps the pointer lock, because it is *steered* by the locked pointer —
+   *  but the world holds still under it all the same. */
+  const [posing, setPosing] = useState(false);
 
   /** Which side you are on, read off the room rather than chosen. */
   const role: Role = room?.role ?? "chameleon";
@@ -83,13 +101,12 @@ export function Game() {
     paused,
     painting,
     chatting,
-    pausedRef,
     paintingRef,
     resume,
     setPaintOpen,
     setChatOpen,
     closeOverlays,
-  } = usePauseControl({ joined, role, dropped, adBreak });
+  } = usePauseControl({ joined, dropped, adBreak });
 
   /** Chat is a waiting-room thing, in the two phases where nobody has a side
    *  yet — the same window the server accepts a `chat` message in. During
@@ -99,12 +116,19 @@ export function Game() {
     !dropped &&
     (room.phase === "waiting" || room.phase === "countdown");
 
-  /** Whether the palette is on screen at all — a hunter has nothing to
-   *  camouflage, and the exhibit is not repainted. The eyedropper and its F key
-   *  live and die with it. */
+  /** Whether paint mode can be entered at all — a hunter has nothing to
+   *  camouflage, and the exhibit is not repainted. The palette and the
+   *  eyedropper both live and die with it. */
   const canPaint = !paused && !dropped && !rooted && role === "chameleon";
-  /** The eyedropper is armed *and* still has a palette to belong to. */
-  const picking = pickArmed && canPaint;
+  /** The eyedropper is armed, the palette is up, and there is therefore a
+   *  cursor to aim it with. Derived rather than cleared from an effect, so an
+   *  armed pick cannot outlive the mode it belongs to and swallow a click. */
+  const picking = pickArmed && canPaint && painting;
+  /** The pose wheel is a chameleon's, and only while they are actually playing.
+   *  It steers on raw pointer movement, so it wants the lock kept — which rules
+   *  out every state that hands the cursor back. */
+  const canPose =
+    joined && role === "chameleon" && !paused && !painting && !chatting && !dropped && !rooted;
 
   const graves = useRoomGraves();
   // Subscribed here rather than in the panel: the backlog is replayed during
@@ -221,39 +245,58 @@ export function Game() {
     return () => window.removeEventListener("keydown", onKey);
   }, [canChat, chatting, setChatOpen]);
 
-  // F arms and disarms the eyedropper. It is the one paint control worth a key:
-  // the click it waits for lands in the world, so reaching back to the panel to
-  // arm it means looking away from the surface you wanted. `KeyF` is free in
-  // `players/controls.ts`.
-  //
-  // Not gated on the palette being open — minimised, the button is a colour
-  // swatch and the crosshair plus the cursor swatch are the whole interface.
+  // **F is paint mode.** Both roles hold the pointer lock now, so painting is
+  // no longer something you can simply reach out and do — the palette is what
+  // hands the cursor back, and it needs a key of its own. A toggle rather than
+  // a hold: mixing a colour takes both hands and as long as it takes.
   useEffect(() => {
     if (!canPaint || chatting) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "KeyF" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      setPaintOpen(!paintingRef.current);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [canPaint, chatting, setPaintOpen, paintingRef]);
+
+  // G arms and disarms the eyedropper, inside paint mode. It is the one paint
+  // control worth a key: the click it waits for lands in the world, so reaching
+  // back to the panel to arm it means looking away from the surface you wanted.
+  // It used to be F, which is now the mode itself.
+  useEffect(() => {
+    if (!canPaint || !painting || chatting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code !== "KeyG" || e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
       setPickArmed((p) => !p);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canPaint, chatting]);
+  }, [canPaint, painting, chatting]);
+
+  // **Walking leaves paint mode.** The movement keys stay live while the palette
+  // is up — `Scene`'s `paused` deliberately does not include `painting` — so a
+  // chameleon who set off to find a better spot was walking with a free cursor
+  // and no camera, and had to go back and shut the panel before they could
+  // look where they were going. Setting off is unambiguous, so it closes it.
+  //
+  // Not on key *up* and not on the frame loop's polled keys: this has to fire
+  // on the first press, before the body has gone anywhere.
+  useEffect(() => {
+    if (!painting) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!WALK_KEYS.has(e.code)) return;
+      setPaintOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [painting, setPaintOpen]);
 
   // The box cannot outlive the window it belongs to: the countdown ending is
   // what closes it for everybody, rather than each client noticing separately.
   useEffect(() => {
     if (!canChat && chatting) setChatOpen(false);
   }, [canChat, chatting, setChatOpen]);
-
-  // Opening the palette clears `paused`, so a hover arriving while the menu is
-  // up would dismiss it. Player already stops reporting hovers when paused;
-  // this is the second lock on the same door.
-  const onHoverBody = useCallback(
-    (hovering: boolean) => {
-      if (pausedRef.current) return;
-      if (hovering && !paintingRef.current) setPaintOpen(true);
-    },
-    [setPaintOpen, pausedRef, paintingRef],
-  );
 
   const leave = useCallback(() => {
     // Mid-roll. A click, and squarely outside gameplay — this is the player
@@ -293,6 +336,9 @@ export function Game() {
     <div className="relative h-dvh w-full">
       <Scene
         map={room?.map ?? DEFAULT_MAP}
+        // The hunter waits out `hiding` in the lobby, which is the whole
+        // window this has to work in — see `world/MapWarmer`.
+        nextMap={room?.nextMap}
         // The player is keyed on this, so crossing between a lobby and its
         // match rebuilds them at the spawn point rather than carrying the pose
         // and position of the game that just ended.
@@ -308,7 +354,10 @@ export function Game() {
         // A dropped player's input goes nowhere. The reveal is *not* in here:
         // the round is decided but everyone keeps walking, which is how you go
         // and look at the spot that beat you.
-        paused={paused || dropped || chatting || adBreak}
+        // The wheel is in here too: a body should be standing still while its
+        // pose is being chosen, and the mouse under an open wheel is aiming at
+        // a wedge rather than turning the camera.
+        paused={paused || dropped || chatting || adBreak || posing}
         brush={brush}
         onBrush={setBrush}
         picking={picking}
@@ -316,19 +365,23 @@ export function Game() {
           setBrush((b) => ({ ...b, color: hex }));
           setPickArmed(false);
         }}
-        onHoverBody={onHoverBody}
       />
       {/* Over the world and under every panel, and on exactly the condition
-          `Scene` blurs for: everyone in a lobby is nominally a hunter, so the
-          role alone would grain the waiting room. */}
-      {role === "hunter" && room?.phase === "hunt" && <HuntVision />}
+          `Scene` blurs for — the two are one effect and must not disagree.
+          Everyone in a lobby is nominally a hunter, so the role alone would
+          grain the waiting room; the reveal is in because a hunter does not get
+          a clean look at the spot that beat them. */}
+      {role === "hunter" &&
+        (room?.phase === "hunt" || room?.phase === "reveal") && <HuntVision />}
       {joined ? (
         <>
           {/* Chameleons only. A hunter walks and shoots, which no legend has
               to say — and everyone waiting in a lobby is nominally one, so the
               panel appears when the draw hands you a side that has something
               to learn. */}
-          {role === "chameleon" && <ControlsPanel />}
+          {role === "chameleon" && !paused && !dropped && (
+            <ControlsPanel painting={painting} />
+          )}
           {/* Sides are secret until they exist. Everyone waiting in a lobby is
               nominally a hunter — that is what `onJoin` sets — so labelling the
               rows before the draw would print "hunter" beside every name and
@@ -389,6 +442,14 @@ export function Game() {
               }}
             />
           )}
+          {/* Hold R. It owns its own key, its own pointer and which wedge is
+              lit, and hands back only the pose that was picked. */}
+          <PoseWheel
+            enabled={canPose}
+            current={currentPose}
+            onOpenChange={setPosing}
+            onPick={requestPose}
+          />
           {role === "hunter" && !paused && !painting && !dropped && (
             <div className="pointer-events-none absolute left-1/2 top-1/2 h-1.5 w-1.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-black/70" />
           )}
@@ -429,7 +490,7 @@ export function Game() {
             </div>
           )}
           {error && (
-            <div className="absolute bottom-4 left-1/2 max-w-lg -translate-x-1/2 rounded-md border border-amber-600/60 bg-amber-950/80 px-4 py-2 text-center text-xs text-amber-200">
+            <div className="absolute bottom-32 left-1/2 max-w-lg -translate-x-1/2 rounded-md border border-amber-600/60 bg-amber-950/80 px-4 py-2 text-center text-xs text-amber-200">
               {error}
             </div>
           )}

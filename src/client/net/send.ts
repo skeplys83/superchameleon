@@ -11,8 +11,9 @@ export function sendState(
   pitch: number,
   pose: number,
   cling: number,
+  upright: boolean,
 ) {
-  getRoom()?.send(toServer.state, { p, yaw, pitch, pose, cling });
+  getRoom()?.send(toServer.state, { p, yaw, pitch, pose, cling, upright });
 }
 
 export function sendPaint(strokes: string[]) {

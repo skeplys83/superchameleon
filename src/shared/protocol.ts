@@ -27,7 +27,7 @@ export type Phase = "waiting" | "countdown" | "hiding" | "hunt" | "reveal";
 export const MESSAGES = {
   /** client → server. What a player may ask for. */
   toServer: {
-    /** Position, look, pose and cling, every frame. */
+    /** Position, look, pose, cling and the lie-flat toggle, every frame. */
     state: "state",
     /** A batch of encoded brush strokes. */
     paint: "paint",
@@ -126,6 +126,9 @@ export const MAX_STROKE_LENGTH = 40;
 /** The hard bounds on a lobby's size — not the size of any given lobby. */
 export const MIN_PLAYERS = 2;
 export const MAX_PLAYERS = 12;
+/** What Play now opens. The menu asks nothing any more, so this is the size
+ *  every lobby is unless something else offers a choice. */
+export const DEFAULT_PLAYERS = 8;
 
 /** How long the lobby counts down before a round begins. */
 export const COUNTDOWN_SECONDS = 5;

@@ -105,10 +105,22 @@ mechanism and the prose that explains it; the component is now composition.
   for the start menu's code box and for `useCrazyGames`' auto-join. Those were
   always the fallback path and are now the only path, so deleting the file to be
   rid of the portal takes invites with it.
-- **`Game.tsx` owns the two HUD keys, `T` and `F`.** Chat and the eyedropper
-  both need a key that works while their panel is merely legible, and neither
-  belongs to `players/controls.ts`. `picking` is *derived* from the armed flag
-  and the palette being on screen, so it cannot outlive the panel.
+- **`Game.tsx` owns the HUD keys — `T`, `F`, `G` and `R`.** None of them
+  belongs to `players/controls.ts`, which is drei's keyboard map for things the
+  frame loop polls. `T` is chat, `F` is paint mode, `G` arms the eyedropper
+  inside it, and `R` is the pose wheel — which owns its own key entirely, since
+  it owns the whole hold-flick-release gesture. `picking` is *derived* from the
+  armed flag and paint mode being on, so it cannot outlive the mode.
+- **Both roles hold the pointer lock**, so the cursor comes back for exactly
+  three things: the pause menu, the chat box and paint mode. The pose wheel is
+  the exception that proves it — it is steered by the *locked* pointer's raw
+  movement, so it keeps the lock and is folded into `Scene`'s `paused` instead,
+  which holds the body still and stops the same movement turning the camera.
+- **Walking leaves paint mode.** The movement keys stay live while the palette
+  is up — `Scene`'s `paused` deliberately does not include `painting` — so
+  setting off used to mean walking with a free cursor and no camera. The key
+  list comes from `players/controls.ts` rather than being written out again, and
+  it fires on the first keydown, before the body has gone anywhere.
 - **A change of room is a clean slate**, and `net/`'s `onLeftRoom` is the one
   place that says so. Anything added later that belongs to a room resets there.
 - **Anything replayed on join subscribes from `Game.tsx`, never from the panel
@@ -128,11 +140,16 @@ mechanism and the prose that explains it; the component is now composition.
 - **`Scene.tsx` passes the phase down as three separate facts** — `reveal`,
   `hunting`, `frozen` — because each is read by a different part of the tree.
 - **The hunter hunts through a coarser picture, and it is two Canvas props.**
-  `blinded` is `role === "hunter" && hunting`; it drops `dpr` to `HUNT_DPR` and
+  `blinded` is `role === "hunter" && (hunting || reveal)`; it drops `dpr` to `HUNT_DPR` and
   `HUNT_UPSCALE` decides how that frame is stretched back up — `auto` for the
   soft blur it uses now, `pixelated` for a crunchy one. **Gated on the phase as
   much as on the role** — everyone in a lobby is nominally a hunter, so the role
-  alone would blur the waiting room.
+  alone would blur the waiting room. **The reveal is one of those phases**: it
+  used to lift at the gong, which handed every hunter a sharp picture of the
+  spots that had just beaten them. The survivors are the exhibit and see it
+  clearly; the people who could not find them go on looking through the picture
+  they lost through. `HuntVision` in `hud/` is gated on exactly the same pair
+  and the two must not drift.
 - **That blur is live, not a startup setting.** It is two plain props rather
   than an effect because r3f re-applies `dpr` on every render of the Canvas and
   a store subscription turns that into `setPixelRatio` + `setSize` on the spot —
@@ -147,9 +164,12 @@ mechanism and the prose that explains it; the component is now composition.
   is what would look broken.
 - **`leave` is the only exit, from either room.** There is no "back to the
   lobby" path out of a match: a player who walked out of a round is out of it.
-- **Esc closes the pause menu for a chameleon and not for a hunter.** A hunter's
-  Esc never reaches the app: the browser spends it releasing the pointer lock,
-  and `pointerlockchange` is what raises their menu.
+- **Esc never *opens* the pause menu any more; losing the lock does.** Now that
+  both roles hold one, a playing player's Esc is spent by the browser releasing
+  it, and `pointerlockchange` is what raises the menu. Esc still reaches the app
+  while the cursor is already free, where it closes the chat box, paint mode or
+  the menu itself — and a menu that opened by pausing must not be dismissed by a
+  keystroke arriving while the page is in the background, which is `hasFocus`.
 - **`useDevQuickPlay` drives the ordinary path fast; it does not add a new
   one.** It opens a lobby, points a second window at the `?code=` invite, and
   sends `start` when the seat fills. **The popup is opened in the click

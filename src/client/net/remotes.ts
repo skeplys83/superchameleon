@@ -12,6 +12,8 @@ export type RemoteTarget = {
    *  climbing, so they are silent; which surface decides which way up a pose
    *  that lies flat is drawn. */
   cling: number;
+  /** Their X toggle: a pose that could lie flat is being held on its feet. */
+  upright: boolean;
 };
 
 export type Remote = {

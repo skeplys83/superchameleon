@@ -13,6 +13,7 @@ export type NetState = {
   pose: number;
   /** What they are stuck to — `CLING_*` in `shared/protocol`. */
   cling: number;
+  upright: boolean;
 };
 
 /**
@@ -24,7 +25,7 @@ export function useStateBroadcast(netState: RefObject<NetState>) {
   useEffect(() => {
     const send = setInterval(() => {
       const t = netState.current;
-      sendState([t.x, t.y, t.z], t.yaw, t.pitch, t.pose, t.cling);
+      sendState([t.x, t.y, t.z], t.yaw, t.pitch, t.pose, t.cling, t.upright);
     }, STATE_SEND_MS);
     return () => clearInterval(send);
   }, [netState]);

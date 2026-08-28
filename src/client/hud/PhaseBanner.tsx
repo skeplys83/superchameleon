@@ -1,5 +1,6 @@
 import type { Phase, Role } from "@/shared/protocol";
 import { HUNT_URGENT_SECONDS } from "@/shared/protocol";
+import { LABEL as CAPS } from "./ui";
 
 /** The clock, and what it is counting towards. */
 const LABEL: Record<Phase, { chameleon: string; hunter: string } | null> = {
@@ -33,7 +34,7 @@ export function PhaseBanner({
     // Not positioned here: `Game.tsx` stacks this under the lobby panel when
     // there is one, so the gap is laid out rather than guessed at.
     <div
-      className={`pointer-events-none select-none rounded-lg px-4 py-2 text-center backdrop-blur ${
+      className={`pointer-events-none select-none rounded-xl px-5 py-2 text-center backdrop-blur ${
         phase === "hiding"
           ? "bg-emerald-950/80 text-emerald-200"
           : urgent
@@ -41,10 +42,10 @@ export function PhaseBanner({
             : "bg-black/60 text-neutral-100"
       }`}
     >
-      <div className="text-[10px] uppercase tracking-widest opacity-70">
+      <div className={`opacity-80 ${CAPS}`}>
         {role === "hunter" ? label.hunter : label.chameleon}
       </div>
-      <div className="font-mono text-2xl leading-tight tabular-nums">
+      <div className="font-mono text-2xl font-extrabold leading-tight tabular-nums">
         {mm}:{ss}
       </div>
     </div>

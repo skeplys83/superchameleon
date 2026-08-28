@@ -50,21 +50,49 @@ describe("lying on its side", () => {
   });
 });
 
-describe("holding on", () => {
-  it("treats a ceiling exactly like a wall, for every mode", () => {
-    // The rule that made the corner between them work: a `back` pose lying on a
-    // ceiling is long along its forward axis, and you face a wall to climb it,
-    // so reaching the ceiling drove a body-length of collider into that wall.
-    for (const mode of ["back", "side", "none"] as const) {
-      expect(after(flatFor(mode, CLING_CEILING), HEAD), mode).toEqual(
-        after(flatFor(mode, CLING_WALL), HEAD),
-      );
-      expect(after(flatFor(mode, CLING_CEILING), BACK), mode).toEqual(
-        after(flatFor(mode, CLING_WALL), BACK),
-      );
+describe("lying on a ceiling", () => {
+  it("puts the back up and the head forward", () => {
+    // The mirror of the floor: the surface is above, so the back goes toward
+    // it. The head still leads, for the same reason it does on the floor.
+    expect(after(flatFor("back", CLING_CEILING), BACK)).toEqual(UP);
+    expect(after(flatFor("back", CLING_CEILING), HEAD)).toEqual(FORWARD);
+  });
+
+  it("is not the wall's turn, which is upright", () => {
+    expect(after(flatFor("back", CLING_CEILING), HEAD)).not.toEqual(
+      after(flatFor("back", CLING_WALL), HEAD),
+    );
+  });
+
+  it("differs from the floor by a left-right flip and nothing else", () => {
+    // Which is what lying on your back rather than your front is. Both put the
+    // head forward; only the side the body's own right ends up on changes.
+    expect(after(flatFor("back", CLING_NONE), HEAD)).toEqual(
+      after(flatFor("back", CLING_CEILING), HEAD),
+    );
+    expect(after(flatFor("back", CLING_NONE), RIGHT)).toEqual([-1, 0, 0]);
+    expect(after(flatFor("back", CLING_CEILING), RIGHT)).toEqual([1, 0, 0]);
+  });
+});
+
+describe("the X toggle", () => {
+  it("stands every mode upright on every surface", () => {
+    for (const mode of ["back", "side"] as const) {
+      for (const surface of [CLING_NONE, CLING_WALL, CLING_CEILING]) {
+        expect(after(flatFor(mode, surface, true), HEAD), `${mode} ${surface}`).toEqual(UP);
+        expect(after(flatFor(mode, surface, true), BACK), `${mode} ${surface}`).toEqual([0, 0, 1]);
+      }
     }
   });
 
+  it("defaults to lying, so every existing caller is unchanged", () => {
+    for (const surface of [CLING_NONE, CLING_WALL, CLING_CEILING]) {
+      expect(flatFor("back", surface).toArray()).toEqual(flatFor("back", surface, false).toArray());
+    }
+  });
+});
+
+describe("holding a wall", () => {
   it("stands `back` upright, because a body on its back cannot grip", () => {
     expect(after(flatFor("back", CLING_WALL), HEAD)).toEqual(UP);
     expect(after(flatFor("back", CLING_WALL), BACK)).toEqual([0, 0, 1]);
@@ -100,12 +128,29 @@ describe("the box that follows the body", () => {
     expect(turned.map((n) => +n.toFixed(3))).toEqual([0.96, 0.23, 0.12]);
   });
 
-  it("leaves the box standing whenever `back` is holding on", () => {
-    // And this is what keeps it out of the corner: held, the long axis is
-    // vertical and hangs into the room rather than into the wall.
+  it("leaves the box standing when `back` is holding a wall", () => {
+    // A wall is the one surface a body cannot lie against, so its box is the
+    // standing one — long axis vertical, hanging into the room.
     expect(turnHalf(STANDING, flatFor("back", CLING_WALL))).toEqual(STANDING);
-    expect(turnHalf(STANDING, flatFor("back", CLING_CEILING))).toEqual(STANDING);
     expect(turnHalf(STANDING, flatFor("none", CLING_NONE))).toEqual(STANDING);
+  });
+
+  it("lays the box down on a ceiling too", () => {
+    // It used to stand up here, because a body-length swung sideways went into
+    // the wall you climbed to reach the ceiling. What made this safe is
+    // `poseExtents` keeping the standing *footprint* — see `poses.test.ts`.
+    const [x, y, z] = turnHalf(STANDING, flatFor("back", CLING_CEILING));
+    expect(y).toBeCloseTo(0.12);
+    expect(z).toBeCloseTo(1.1);
+    expect(x).toBeCloseTo(0.12);
+  });
+
+  it("stands the box up for the X toggle, whatever the surface", () => {
+    for (const surface of [CLING_NONE, CLING_WALL, CLING_CEILING]) {
+      expect(turnHalf(STANDING, flatFor("back", surface, true)), `surface ${surface}`).toEqual(
+        STANDING,
+      );
+    }
   });
 
   it("keeps `side`'s box lying down everywhere", () => {

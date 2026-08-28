@@ -11,6 +11,7 @@ is, for the brush).
 | `poses.ts`         | `POSES`: the joint-angle table, and each pose's own box  |
 | `flat.ts`          | how a pose that lies flat is oriented, per surface        |
 | `rig.ts`           | bone names, rest rotations, and how an angle is applied  |
+| `walk.ts`          | the walk cycle, added on top of a pose rather than being one |
 | `model.ts`         | fetching `player.glb`, imperatively                      |
 
 ## The three rules that will bite you
@@ -28,6 +29,14 @@ is, for the brush).
    `FITTED_HY` — pose 0's own, read off the table so the two cannot drift.
    Without that, `BODY_SCALE` shrank the figure and left its lying and curled
    colliders full size.
+
+   **Fitted, but no longer unchecked.** `test/posedBounds.test.ts` poses the
+   real `player.glb` through `poseTargets` and `applyPose` — the same two calls
+   `StickFigure` makes — skins it in Node and measures where the body actually
+   is. It pins the two things a box can be plainly *wrong* about: that it never
+   states a shape bigger than the body, and that an upright pose's box is on the
+   body rather than beside it. It deliberately does **not** pin how much smaller
+   the box is; that gap is the hiding mechanic and it is a judgement.
 3. **A pose is composed onto a bone's rest rotation, never written over it.**
    The rig comes out of Blender with meaningful rest rotations and the skeleton
    sits inside a node the exporter rotated to stand a Z-up model up. Overwriting
@@ -38,24 +47,38 @@ is, for the brush).
 
 `Pose.flat` is one of three, and it is per-pose because the poses disagree:
 
-| key | `flat` | on the floor | held: a wall *or* a ceiling |
+| key | `flat` | on the floor | on a ceiling, or holding a wall |
 | --- | ------ | ------------ | --------------------------- |
 | 1 Stand | `none` | upright | upright |
-| 2 Reach up | `back` | back down, head forward | upright |
-| 3 Star jump | `back` | back down, head forward | upright |
+| 2 Reach up | `back` | back down, head forward | ceiling: back **up**, head forward · wall: upright |
+| 3 Star jump | `back` | back down, head forward | the same |
 | 4 Lie flat | `side` | on its shoulder, as it always was | the same — it never stands up |
 | 5 Curl up | `none` | a ball reads the same either way up | upright |
 
-**Only the floor is lain on.** A wall and a ceiling are both *held*, and a body
-holds them the same way. That single rule is what made the corner between them
-work: a `back` pose lying on a ceiling is long along its **forward** axis, and
-you face a wall to climb it — so reaching the ceiling drove a body-length of
-collider straight into that wall and jammed there. Held upright, the long axis
-is vertical and hangs into the room instead.
+**A ceiling is lain against exactly as a floor is; only a wall is held.** Both
+used to be held upright, and for a real reason: a `back` pose lying on a ceiling
+is long along its **forward** axis, and you face a wall to climb it — so
+reaching the ceiling drove a body-length of collider straight into that wall and
+jammed. What makes lying on a ceiling safe is the *later* rule below — the
+turned box supplies its vertical extent and nothing else — so there is no
+body-length left to swing into anything. A wall stays upright for a reason that
+does not expire: a body on its back cannot grip one.
 
-`side` is the exception that proves it: it never stands up at all, because its
-long axis is left-right, so on a ceiling it already lies *across* the wall it
-climbed rather than into it. That is why pose 4 worked while 2 and 3 stuck.
+The ceiling turn is `Rx(−π/2)`, and one axis is enough there. On the floor it
+takes two, because the back has to go *down* while the head goes forward; with
+the back going up instead, the plain tip is already right. The two differ by a
+left-right flip, which is what lying on your back rather than your front is.
+
+`side` never stands up at all, because its long axis is left-right, so on a
+ceiling it lies *across* the wall it climbed rather than into it — and
+`Rz(+π/2)` puts the right shoulder up, which is the shoulder a ceiling is
+against. It is the same turn on all three surfaces.
+
+**`X` overrides all of it.** The player can hold a pose that *could* lie flat on
+its feet instead, and `upright` is threaded through `flatFor`, `poseExtents` and
+`poseCentre` together, so the collider stands up with the figure. It is on the
+wire (`Player.upright` in the schema), because the pose it changes is what a
+chameleon is hiding as — everybody has to draw the same body.
 
 **Lying only ever makes the box shorter, never wider.** The turned box supplies
 its *vertical* extent and nothing else; horizontally it stays the standing
@@ -114,12 +137,26 @@ between orientations with the same damping the joints use.
 
 ## Contracts
 
-- **A pose's `centre.y` has to track its `offsetY`.** `offsetY` moves the
-  *figure* inside its collider; `centre` moves the *collider*. They describe the
-  same shift and must agree, or the box hangs below the body — and since a pose
-  change keeps the box's **underside** put (`players/Player.tsx`), the body is
-  then seated on a floor its own feet are not touching. `curl` sat at half its
-  figure's shift and floated a curled chameleon 0.07 above the ground.
+- **A pose's `centre` is where the body's mass ends up, measured — not the
+  figure's own shift repeated.** `offsetY`/`offsetZ` move the *figure* inside
+  its collider, `centre` moves the *collider*, and the trap is that they are not
+  the same number: the offsets exist to bring a pose that throws itself forward
+  back over its own origin, so copying them into `centre` counts the shift
+  twice. `curl` has now been wrong in both directions. It sat at *half* its
+  figure's shift and floated a curled chameleon 0.07 above the ground; the fix
+  set `centre` to the shift exactly, which put the box 0.08 above and 0.19
+  behind the ball it wraps — a third of the body under the floor and its
+  collider out behind it. Measured, that centre is `[0, 0.074, 0]`, and
+  `test/posedBounds.test.ts` is what says so.
+
+  It matters because a pose change keeps the box's **underside** put
+  (`players/Player.tsx`), so a box in the wrong place seats the body on a floor
+  its own feet are not touching.
+- **A pose that lies down sinks into the floor, and that is not a bug.** On the
+  floor the boxes sit 0.07–0.15 above the body's lowest point, so a lying
+  chameleon is pressed slightly *into* the ground. That is the same mechanic as
+  sinking into a wall, seen from the side — it is what makes a body against a
+  surface read as part of it. Only an upright pose is held to landing on it.
 - **`POSE_COUNT` lives in `shared/protocol.ts`** and `poses.ts` throws on import
   if its table disagrees, so the two can never drift.
 - **`safePose` guards everything off the wire.**
@@ -132,6 +169,17 @@ between orientations with the same damping the joints use.
   viewer, so a glossier body than the wall behind it reads as a silhouette from
   one side of the room however well it is matched. It was 0.55, and caught a
   sheen along every limb that the ward's plaster did not.
+- **The walk cycle is a layer, never a pose.** `walk.ts` adds a sine to four
+  joints on top of the standing pose; it is applied to a **copy** of the damped
+  angles (`copyAngles`), because those are the damper's own state and a swing
+  written back into them is one the next frame eases away from. It rides
+  `POSES[0]` and `CLING_NONE` only, its amplitude damps to a hard zero when the
+  odometer stops — a limb ticking at 1% on a still body is a tell no paint
+  answers — and it leaves the gun arm and the torso lean alone while aiming,
+  since the barrel's direction is what a chameleon reads to know where a hunter
+  is pointed. `StickFigure` takes the phase as a getter: **one footfall is π**,
+  and the caller converts from metres, because a stride belongs to the body's
+  height (`sound/footsteps.ts`) and nothing here knows about roles.
 - **`paint/` reads the real limb sizes from here**, and this folder reads the
   canvases from `paint/skin.ts`. Known, acyclic at the module level.
 

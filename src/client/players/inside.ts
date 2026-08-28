@@ -50,6 +50,46 @@ export function keepInside(
   return true;
 }
 
+/** Started a hair above the foot line, so a body resting exactly on the floor
+ *  does not have its first hit be the floor it is standing on. */
+const LIFT = 0.02;
+/** No ceiling further than this is worth knowing about — nothing a player can
+ *  hold is taller, and an unbounded ray is one more thing for every frame to
+ *  walk the whole room for. */
+const REACH = 6;
+const up = new THREE.Vector3(0, 1, 0);
+const from = new THREE.Vector3();
+
+/**
+ * How much clear height there is above the body's feet, or `Infinity` under an
+ * open sky.
+ *
+ * **What it is for: a pose is not always something you can leave.** A chameleon
+ * lying under a bed or curled into a cupboard has a box a fraction of their
+ * standing height, and standing back up would put the rest of them through the
+ * furniture above. `players/Player.tsx` measures against this before it lets a
+ * pose change — or the walk that forces one — happen at all.
+ *
+ * One ray, straight up from the middle of the feet. It will not notice a beam
+ * that clears the centre and clips a shoulder; the alternative is a shape cast
+ * per frame per pose, and the cheap version is what a player reads as "there is
+ * a bed over me".
+ */
+export function headroom(
+  /** The body's centre — only its x and z are read. */
+  body: THREE.Vector3,
+  /** World height of the underside of the body's box. */
+  footY: number,
+  solids: THREE.Object3D[],
+): number {
+  if (!solids.length) return Infinity;
+  from.set(body.x, footY + LIFT, body.z);
+  ray.set(from, up);
+  ray.far = REACH;
+  const above = ray.intersectObjects(solids, false)[0];
+  return above ? above.distance + LIFT : Infinity;
+}
+
 /** Below this, an overlap is float dust rather than a body in a wall. Without
  *  it a box resting exactly on the floor is pushed up every frame and floats. */
 const TOLERANCE = 0.005;

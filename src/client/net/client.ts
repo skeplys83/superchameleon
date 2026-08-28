@@ -46,6 +46,7 @@ type PlayerSchema = {
   pitch: number;
   pose: number;
   cling: number;
+  upright: boolean;
   strokes: { forEach(cb: (raw: string) => void): void };
 };
 
@@ -187,6 +188,7 @@ async function attach(joined: Room): Promise<RoomInfo> {
         pitch: player.pitch,
         pose: player.pose,
         cling: player.cling,
+        upright: player.upright,
       },
     });
     emitRoster();
@@ -211,6 +213,7 @@ async function attach(joined: Room): Promise<RoomInfo> {
       remote.target.pitch = player.pitch;
       remote.target.pose = player.pose;
       remote.target.cling = player.cling;
+      remote.target.upright = player.upright;
     });
   });
 

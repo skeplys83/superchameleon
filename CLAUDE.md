@@ -291,6 +291,7 @@ https://joethejunkbox.itch.io/psx-subway-station
 https://vyrez-games.itch.io/psx-horror-house-modular-pack-v1
 https://amos-makes.itch.io/psx-hospital-pack
 https://madduck.itch.io/modular-3d-hospital-environment - in use
+https://valsekamerplant.itch.io/psx-style-opulent-office
 https://ink-ribbon.itch.io/psx-restroom-environment-asset-pack
 https://retroshaper.itch.io/dungeon-maker-with-geometry-nodes - interesting duengon
 https://lewie-kowalski.itch.io/psx-retro-props-pack
@@ -300,6 +301,8 @@ https://quaternius.itch.io/medieval-village-megakit
 https://loafbrr.itch.io/mines-and-cave-set
 https://amos-makes.itch.io/psx-office-pack
 https://aquicor.itch.io/psx-low-poly-kitchen-food-props-pack
+https://elbolilloduro.itch.io/metro
+https://chilly-durango.itch.io/medieval-building-parts
 
 https://valsekamerplant.itch.io/psx-style-urban-stacked-pack
 https://mcpato.itch.io/barranco-bar-ps1-environment

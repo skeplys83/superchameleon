@@ -8,6 +8,7 @@ import { controlMap } from "@/client/players/controls";
 import { GRAVITY } from "@/client/players/body";
 import { Player } from "@/client/players/Player";
 import { Room } from "@/client/world/Room";
+import { MapWarmer } from "@/client/world/MapWarmer";
 import { DEV, reportDraw, useDevMode } from "@/client/app/dev";
 import { MAPS, mapSpawn, safeMapId } from "@/shared/maps";
 import { Marks } from "@/client/combat/Marks";
@@ -101,6 +102,7 @@ function FrameLimiter({ fps }: { fps: number }) {
 
 export default function Scene({
   map,
+  nextMap,
   room,
   role,
   reveal,
@@ -113,10 +115,12 @@ export default function Scene({
   onBrush,
   picking,
   onPicked,
-  onHoverBody,
 }: {
   /** Which map this room is playing, straight from room state. */
   map: string;
+  /** The map this room is about to send everyone to, so its textures can be
+   *  uploaded from a lobby nobody is in a hurry to leave. */
+  nextMap?: string | null;
   /** Which room this is — its invite code, which is its id. */
   room: string;
   role: Role | null;
@@ -134,7 +138,6 @@ export default function Scene({
   onBrush: (b: Brush) => void;
   picking: boolean;
   onPicked: (hex: string) => void;
-  onHoverBody: (hovering: boolean) => void;
 }) {
   const chosen = MAPS[safeMapId(map)];
   const render = chosen.render;
@@ -151,10 +154,16 @@ export default function Scene({
    * would look broken.
    *
    * **Gated on the phase as much as on the role**: everyone in a lobby is
-   * nominally a hunter, so the role alone would pixelate the waiting room. It
-   * switches itself off when `hunting` does, which is the reveal.
+   * nominally a hunter, so the role alone would pixelate the waiting room.
+   *
+   * **It stays on through the reveal.** It used to lift at the gong, which
+   * handed every hunter a sharp picture of the spots that had just beaten them
+   * — the one view of a hiding place they had spent five minutes failing to
+   * find. The survivors are the exhibit and they see it clearly; the people who
+   * could not find them go on looking through the same picture they lost
+   * through. It lifts on the way back to the lobby, when the phase is neither.
    */
-  const blinded = role === "hunter" && hunting;
+  const blinded = role === "hunter" && (hunting || reveal);
 
   // Both debug pictures follow the toggle, so this re-renders on the flip.
   const devMode = useDevMode();
@@ -189,6 +198,9 @@ export default function Scene({
           debug={devMode}
         >
           <Room map={map} />
+          {/* Outside `Room` because it is about the map that is *not* on
+              screen. See `MapWarmer` — this is the hitch at the bell. */}
+          <MapWarmer id={nextMap} current={map} />
           {role && (
             <Player
               key={`${room}:${role}`}
@@ -201,7 +213,6 @@ export default function Scene({
               onBrush={onBrush}
               picking={picking}
               onPicked={onPicked}
-              onHoverBody={onHoverBody}
             />
           )}
         </Physics>

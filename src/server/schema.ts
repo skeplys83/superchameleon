@@ -19,6 +19,10 @@ export class Player extends Schema {
    *  `CLING_CEILING`. It silences their footsteps for everyone else, and tells
    *  every client which way up to draw a pose that lies flat. */
   declare cling: number;
+  /** The X toggle: this player is keeping a pose that *could* lie flat on its
+   *  feet instead. Cosmetic, but it has to be everyone's — the pose it changes
+   *  is what a chameleon is hiding as, so it cannot be local to one client. */
+  declare upright: boolean;
   declare strokes: ArraySchema<string>;
 
   constructor() {
@@ -39,6 +43,7 @@ defineTypes(Player, {
   pitch: "number",
   pose: "number",
   cling: "number",
+  upright: "boolean",
   strokes: ["string"],
 });
 

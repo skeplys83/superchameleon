@@ -47,19 +47,23 @@ const CHAMELEON = 0.12;
  * `HUNT_DPR` blurs by how few pixels a target covers, and the grain in
  * `hud/HuntVision` is worth most on a soft edge seen from across a room.
  *
- * **The doorways are the ceiling, and this is now against it.** At 0.78 the
- * collider is a 1.44 m cylinder against the hospital's narrowest clear opening,
- * 1.49 m — under three centimetres of margin each side. A cylinder is what makes
- * even that possible: `Player.tsx` gives a hunter a `CylinderCollider`, and a
- * ball in plan has no diagonal, so what must fit through a door is the diameter
+ * **The doorways are the ceiling, and this is hard against it.** At 0.79 the
+ * collider is a 1.454 m cylinder, and rapier's 0.005 skin (`controller.ts`)
+ * makes that 1.464 m of clearance needed against the hospital's narrowest
+ * opening, 1.49 m — **1.3 cm each side**. A cylinder is what makes even that
+ * possible: `Player.tsx` gives a hunter a `CylinderCollider`, and a ball in
+ * plan has no diagonal, so what must fit through a door is the diameter
  * whichever way the body is facing. The box this replaced was 1.29 across and
  * 1.82 corner to corner — wider than the doorway it was walking through.
  *
- * **Do not raise this without widening the doorways first.** Past the opening
- * the hunter does not squeeze, they simply stop: a kinematic body that cannot
- * fit gets no movement back at all, and the ward wings become unreachable.
+ * **This is the last centimetre; the next one needs the doorways widened.**
+ * Past the opening the hunter does not squeeze, they simply stop — a kinematic
+ * body that cannot fit gets no movement back at all, and the ward wings become
+ * unreachable. The order is: widen every opening in `levels/hospital`, re-export,
+ * check the narrowest again, and only then raise this. Note that
+ * `BODY_SCALE.hunter` multiplies it, so raising *that* spends the same margin.
  */
-const HUNTER = 0.78;
+const HUNTER = 0.79;
 
 /**
  * How big each body is against the size it was built at, so the rooms read as

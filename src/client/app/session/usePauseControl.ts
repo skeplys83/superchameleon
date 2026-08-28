@@ -1,12 +1,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { cancelLock, lockTargetEl, requestLock } from "@/client/players/pointerLock";
 import { setAudioSuspended } from "@/client/sound/engine";
-import type { Role } from "@/shared/protocol";
 import { useLatestRef } from "./useLatestRef";
 
 type Options = {
   joined: boolean;
-  role: Role;
   dropped: boolean;
   /** An ad is on screen. It is not a pause — there is no menu and nothing to
    *  resume — but it wants the same two things a pause does. */
@@ -29,7 +27,7 @@ type Options = {
  * pressed Esc to shut an invisible palette and only then found something to
  * resume. Owning both states here is what stops a future path forgetting.
  */
-export function usePauseControl({ joined, role, dropped, adBreak = false }: Options) {
+export function usePauseControl({ joined, dropped, adBreak = false }: Options) {
   const [paused, setPaused] = useState(false);
   // `painting` means the palette is up. Hovering your own body opens it, and
   // from then on it stays open until it is minimised — a palette that closed
@@ -128,33 +126,36 @@ export function usePauseControl({ joined, role, dropped, adBreak = false }: Opti
     setAudioSuspended(paused || adBreak);
   }, [paused, adBreak]);
 
+  // **Both roles hold the lock now.** A chameleon's body turns to face the
+  // camera as they walk, so the camera is the steering and a cursor drifting
+  // into a corner of the screen is a wall you cannot look past. The cursor
+  // comes back for exactly the three things that want it — the pause menu, the
+  // chat box, and paint mode, which is what `F` is for.
   useEffect(() => {
     if (!joined) return;
-
-    /** A chameleon must be made to let go, not merely never asked to take. */
-    if (role !== "hunter") {
+    // An ad you cannot click because the cursor is captured is worse than no
+    // ad, so the lock goes for the length of the break like it does for a menu.
+    if (paused || painting || chatting || dropped || adBreak) {
+      // Made to let go, not merely not asked to take: the caller that opened
+      // the overlay usually did this already, and doing it here as well is what
+      // covers the paths that did not.
       cancelLock();
       document.exitPointerLock();
       return;
     }
-
-    // An ad you cannot click because the cursor is captured is worse than no
-    // ad, so the lock goes for the length of the break like it does for a menu.
-    if (paused || painting || chatting || dropped || adBreak) return;
     requestLock();
-  }, [joined, role, paused, painting, chatting, dropped, adBreak]);
+  }, [joined, paused, painting, chatting, dropped, adBreak]);
 
   /**
-   * Esc opens the pause menu, and closes it again — but only for a chameleon,
-   * and only while this document really holds focus.
+   * Esc closes what is open. It does not *open* the pause menu any more —
+   * losing the lock does, below.
    *
-   * **Both halves of that are the pointer lock.** A hunter's Esc never reaches
-   * here at all: the browser spends it releasing the lock, and
-   * `pointerlockchange` is what raises their menu. Were it to reach here,
-   * resuming would ask for the lock back in the same keypress that just gave it
-   * up, which the browser refuses — so Esc would close the menu and leave them
-   * looking around with no lock and no way back. A chameleon never holds one,
-   * so for them the key is free to work both ways.
+   * **That is the pointer lock talking.** Now that both roles hold one, a
+   * playing player's Esc never reaches here at all: the browser spends it
+   * releasing the lock. Were it to reach here and pause, resuming would ask for
+   * the lock back in the same keypress that just gave it up, which the browser
+   * refuses — leaving a player looking around with no lock and no way back. So
+   * the key is only ever read while the cursor is already free.
    *
    * `hasFocus` is the "with the mouse" half: a pause that came from losing the
    * window should be dismissed by coming *back* to it, not by a keystroke that
@@ -164,9 +165,8 @@ export function usePauseControl({ joined, role, dropped, adBreak = false }: Opti
     if (!joined) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.code !== "Escape" || e.repeat || dropped) return;
-      // Before the palette, and before the role check below: while the box is
-      // open the lock is already released, so Esc reaches the app even for the
-      // hunters everybody in a lobby nominally is.
+      // The box first: while it is open the lock is already released, so this
+      // is the one Esc that is certain to have reached the app.
       if (chattingRef.current) {
         setChatOpen(false);
         return;
@@ -175,18 +175,17 @@ export function usePauseControl({ joined, role, dropped, adBreak = false }: Opti
         setPaintOpen(false);
         return;
       }
-      if (role !== "chameleon") return;
-      if (!pausedRef.current) setPaused(true);
-      else if (document.hasFocus()) setPaused(false);
+      if (pausedRef.current && document.hasFocus()) setPaused(false);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [joined, role, dropped, setPaintOpen, setChatOpen, paintingRef, pausedRef, chattingRef]);
+  }, [joined, dropped, setPaintOpen, setChatOpen, paintingRef, pausedRef, chattingRef]);
 
-  // For a hunter, Esc releases the pointer lock rather than reaching the app,
-  // so losing the lock is what actually means "the player wants out".
+  // Esc releases the pointer lock rather than reaching the app, so losing the
+  // lock is what actually means "the player wants out" — for both roles, since
+  // both hold one.
   useEffect(() => {
-    if (!joined || role !== "hunter" || dropped) return;
+    if (!joined || dropped) return;
     /** Whether this hunter has ever actually held the lock. */
     let held = document.pointerLockElement === lockTargetEl();
     const onLockChange = () => {
@@ -210,7 +209,7 @@ export function usePauseControl({ joined, role, dropped, adBreak = false }: Opti
     };
     document.addEventListener("pointerlockchange", onLockChange);
     return () => document.removeEventListener("pointerlockchange", onLockChange);
-  }, [joined, role, dropped, paintingRef, chattingRef, adBreakRef]);
+  }, [joined, dropped, paintingRef, chattingRef, adBreakRef]);
 
   return {
     paused,

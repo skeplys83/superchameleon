@@ -49,6 +49,9 @@ export type Motion = {
   /** Space last frame, so a jump fires on the press rather than on every frame
    *  the key is held down. */
   jumpHeld: boolean;
+  /** X last frame, so the lie-flat toggle flips on the press rather than on
+   *  every frame the key is held down. */
+  flatHeld: boolean;
   /** The surface a chameleon is stuck to, as a normal pointing back at them. */
   cling: THREE.Vector3 | null;
   /** Seconds left before a surface can be grabbed again after letting go. */
@@ -67,6 +70,10 @@ export type Motion = {
    *  it currently stands — so a pose that moves it can move the body by the
    *  difference and leave the feet where they were. */
   footOffset: number;
+  /** Seconds a movement key has been asking to walk. A body already on its feet
+   *  goes on the first frame; one folded up has to get out of the pose first,
+   *  and this is how long it has been trying. Zeroed the moment the ask stops. */
+  unfolding: number;
 };
 
 export const newMotion = (footOffset: number): Motion => ({
@@ -74,6 +81,7 @@ export const newMotion = (footOffset: number): Motion => ({
   vy: 0,
   grounded: false,
   jumpHeld: false,
+  flatHeld: false,
   cling: null,
   reclingGrace: 0,
   surface: 0,
@@ -81,4 +89,5 @@ export const newMotion = (footOffset: number): Motion => ({
   buffered: 0,
   rising: false,
   footOffset,
+  unfolding: 0,
 });

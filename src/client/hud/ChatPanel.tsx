@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { sendChat, type ChatMessage } from "@/client/net";
 import { MAX_CHAT_LENGTH } from "@/shared/protocol";
+import { INPUT } from "./ui";
 
 /**
  * The waiting room's chat: a box that is up for as long as the lobby is, and an
@@ -36,7 +37,7 @@ export function ChatPanel({
           the newest line against the input, and anything past `max-h` runs off
           the top and out of the way. */}
       {messages.length > 0 && (
-        <div className="pointer-events-none flex max-h-48 flex-col justify-end overflow-hidden font-mono text-xs leading-relaxed [text-shadow:0_1px_3px_rgb(0_0_0/0.95)]">
+        <div className="pointer-events-none flex max-h-48 flex-col justify-end overflow-hidden font-mono text-xs font-bold leading-relaxed [text-shadow:0_1px_3px_rgb(0_0_0/0.95)]">
           {messages.map((m) => (
             <div key={m.id} className="break-words">
               <span className="text-emerald-300">{m.name}</span>
@@ -54,9 +55,9 @@ export function ChatPanel({
         // back to the keyboard to be let in.
         <button
           onClick={() => onOpenChange(true)}
-          className="pointer-events-auto flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-left font-mono text-xs text-neutral-400 backdrop-blur transition hover:bg-black/75 hover:text-neutral-200"
+          className="pointer-events-auto flex items-center gap-2 rounded-xl bg-black/60 px-3 py-2 text-left font-mono text-xs font-bold text-neutral-400 backdrop-blur transition hover:bg-black/80 hover:text-neutral-200"
         >
-          <span className="rounded border border-neutral-600 px-1.5 py-0.5 text-[11px] text-neutral-200">
+          <span className="rounded-md border-2 border-neutral-600 px-1.5 py-0.5 text-xs text-neutral-200">
             T
           </span>
           to chat
@@ -104,7 +105,7 @@ function ChatInput({ onClose }: { onClose: () => void }) {
           onClose();
         }
       }}
-      className="pointer-events-auto w-full rounded-lg border border-emerald-600/60 bg-black/80 px-3 py-2 font-mono text-xs text-neutral-100 outline-none backdrop-blur placeholder:text-neutral-600"
+      className={`pointer-events-auto w-full border-emerald-600/60 bg-black/80 font-mono text-neutral-100 backdrop-blur placeholder:text-neutral-600 focus:border-emerald-400 ${INPUT}`}
     />
   );
 }

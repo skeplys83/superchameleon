@@ -11,7 +11,8 @@ graves.
 | `Shotgun.tsx`   | the weapon a remote hunter carries                       |
 | `Viewmodel.tsx` | the one in your own hands, riding the camera             |
 | `recoil.ts`     | a one-frame pulse from the trigger to the viewmodel      |
-| `Marks.tsx`     | wall marks and their tracers — three seconds, then gone  |
+| `muzzle.ts`     | where the barrel ends, so the tracer starts at the gun   |
+| `Marks.tsx`     | the shot's rainbow tracer, and the hidden patch — 3s     |
 | `Graves.tsx`    | where somebody was found — permanent                     |
 
 ## The three rules that will bite you
@@ -65,6 +66,48 @@ whole screen lurching.
 
 Both ride an inner group so the **arms move with the gun** — they are holding
 it, and transforming the gun alone stretches them.
+
+## The mark is the tracer now
+
+**The yellow patch is hidden, not deleted** (`SHOW_PATCH`). It is still what a
+mark *is* — the wire carries a position and a rotation, and the tracer's far end
+is that plane's centre — so taking it out would mean rewriting the message to
+lose a decal. `visible={false}` costs nothing at draw time and one word brings
+it back.
+
+What is left is the beam, and it is drawn to be seen: a 3 cm tube where it used
+to be a 4 mm hairline, carrying a rainbow spiral that turns about its own axis,
+runs muzzle-to-wall, and fades out over the three seconds the mark lives.
+
+The hue is a **function of position on the tube** in a `ShaderMaterial` —
+`uv.y` along it, `uv.x` around it — so the helix costs no geometry, there is no
+texture to author and none to filter, and each of the two rotations is one
+addition. `TRACER_TWIST` is wraps around the circumference and `TRACER_PITCH`
+is repeats **per metre**: `uv.y` is scaled by the shot's real length, or the
+stripes would stretch on a long shot and bunch on a short one and no two beams
+would look like the same thing.
+
+**The beam leaves the barrel, not the eye.** The shot is still *cast* from the
+camera through the centre of the screen — `shoot.ts` never reads the viewmodel,
+which is what makes the recoil's muzzle climb safe — but the camera sits behind
+your eyes, so a beam drawn from `shot.origin` came out of the middle of your
+face while the gun in your hands did nothing. `Viewmodel` hangs an empty at the
+barrel tip, inside the rig, so it picks up the recoil, the bob, the body scale
+and the camera for free; it publishes that point through `muzzle.ts` every
+frame, and the trigger handler sends it as the mark's origin. Module-level for
+the same reason `recoil.ts` is: the gun is in the frame loop, the trigger is a
+DOM event in `players/`, and a prop between them is a React re-render per shot.
+It is one frame stale, which at a metre from the eye is nothing, and it is null
+whenever no viewmodel is mounted — then the origin falls back to the camera.
+
+**A material per beam**, because two of the uniforms are the beam's own — its
+length and how far through its life it is. `useMemo` on the constructor args
+rather than on the material itself, because `Marks` re-renders on every shot
+anybody fires and R3F would otherwise rebuild the material under a beam that is
+halfway through fading. They all read the scene clock, so they still spin in
+step. The fade is **squared**: most of the visible life is the first second and
+the rest is a ghost, where a linear fade sits at half brightness for a second
+and a half and reads as a rope left hanging.
 
 ## Contracts
 

@@ -1,15 +1,25 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal, useFrame } from "@react-three/fiber";
 import * as THREE from "three";
-import { POSES, safePose, type Joint } from "./poses";
+import { POSES, safePose } from "./poses";
 import { CLING_NONE } from "@/shared/protocol";
 import { flatFor } from "./flat";
 import { getSkin } from "@/client/paint/skin";
 import { makeCharacter, preloadCharacter, type Character } from "./model";
-import { applyPose, buildChain, makeAngles } from "./rig";
+import {
+  applyPose,
+  buildChain,
+  copyAngles,
+  dampAngles,
+  makeAngles,
+  poseTargets,
+} from "./rig";
+import { addWalk, WALK_DAMP, WALK_EPSILON } from "./walk";
 
-/** How fast a limb settles into a new pose. Higher is snappier. */
-const POSE_DAMP = 14;
+/** How fast a limb settles into a new pose. Higher is snappier — and snappier
+ *  is not better here: a body that changes pose in two frames reads as a sprite
+ *  swap rather than as somebody lying down. */
+const POSE_DAMP = 8;
 
 /** Elbow to wrist, in the bone's own units — where the shotgun sits, since the
  *  rig ends at the forearm. Measured off the model: the vertices weighted to
@@ -58,6 +68,8 @@ export function StickFigure({
   aim = null,
   holding,
   highlight = false,
+  gait = null,
+  upright = false,
 }: {
   scale?: number;
   /** A getter for remote figures: their pose changes on network patches, which
@@ -74,11 +86,27 @@ export function StickFigure({
   holding?: ReactNode;
   /** Paint this body one flat colour and draw it through walls. */
   highlight?: boolean;
+  /** The X toggle: a pose that could lie flat stays on its feet instead. A
+   *  getter for the same reason `pose` is one. */
+  upright?: boolean | (() => boolean);
+  /** How far through the walk cycle this body is, in radians — one footfall is
+   *  π of it. A getter for the same reason `pose` is one, and the caller owns
+   *  the conversion from metres because the stride belongs to the body's
+   *  height. Left off, the figure never walks. */
+  gait?: (() => number) | null;
 }) {
   const root = useRef<THREE.Group>(null);
   /** How the body is lying right now, eased toward `FLAT_FOR`. */
   const flat = useRef(new THREE.Quaternion());
   const angles = useRef(makeAngles());
+  /** The angles actually written to the bones: the damped pose plus the walk.
+   *  Kept apart from `angles` — see `copyAngles`. */
+  const posed = useRef(makeAngles());
+  /** What the pose is asking for this frame, before the damper eases into it. */
+  const target = useRef(makeAngles());
+  /** The cycle's own state: where it is, how much of it is showing, and the
+   *  phase it saw last frame, which is the only way to tell moving from still. */
+  const walk = useRef({ phase: 0, amp: 0, last: 0, primed: false });
   const skin = getSkin(skinId);
 
   /** Where the shotgun hangs. A child of the forearm bone, so it needs no frame
@@ -160,60 +188,37 @@ export function StickFigure({
     if (!rig) return;
     const { chain } = rig;
 
-    const p = POSES[safePose(typeof pose === "function" ? pose() : pose)];
+    const which = safePose(typeof pose === "function" ? pose() : pose);
+    const p = POSES[which];
     const on = typeof surface === "function" ? surface() : surface;
     const a = angles.current;
-    const to = (from: number, target: number) =>
-      THREE.MathUtils.damp(from, target, POSE_DAMP, delta);
-    /** One leaning bone: pitch, yaw, tilt. Every joint carries all three — see
-     *  `Joint`, where none of them is optional. */
-    const lean = (j: Joint, of: "torso" | "chest" | "neck" | "head") => {
-      a[`${of}X`] = to(a[`${of}X`], j.x);
-      a[`${of}Y`] = to(a[`${of}Y`], j.twist);
-      a[`${of}Z`] = to(a[`${of}Z`], j.spread);
-    };
+    const want = target.current;
 
-    lean(p.torso, "torso");
-    lean(p.chest, "chest");
-    lean(p.neck, "neck");
-    lean(p.head, "head");
-    a.rootX = to(a.rootX, p.rootX);
+    // What the pose asks for, before any easing. `poseTargets` lives in
+    // `rig.ts` so that the harness which measures a posed body against the real
+    // mesh poses it exactly the way this does — see `test/posedBounds.test.ts`.
+    poseTargets(p, want);
+
+    // The gun arm leaves the pose entirely while aiming: straight out in front
+    // at rest (x = π/2), rising and falling with pitch. Written onto the
+    // *target*, so it is eased into like everything else.
+    if (aim !== null) {
+      want.shoulderX[1] = Math.PI / 2 + aim();
+      want.shoulderY[1] = 0;
+      want.shoulderZ[1] = 0.12;
+      want.elbowX[1] = 0;
+      want.elbowY[1] = 0;
+      want.elbowZ[1] = 0;
+    }
+
+    dampAngles(a, want, POSE_DAMP, delta);
+
     // Flat on the floor, flat the other way up against a ceiling, upright to
     // climb a wall. Damped exactly as the joints are — `MathUtils.damp` is a
     // lerp with this same factor — so a chameleon that grabs a wall stands up
     // over a few frames instead of snapping vertical.
-    flat.current.slerp(flatFor(p.flat, on), 1 - Math.exp(-POSE_DAMP * delta));
-    a.offsetY = to(a.offsetY, p.offsetY);
-    a.offsetZ = to(a.offsetZ, p.offsetZ);
-
-    for (let i = 0; i < 2; i++) {
-      const side = i === 0 ? -1 : 1;
-      // `Angles` is indexed [left, right]; the table names its two sides.
-      const of = i === 0 ? "left" : "right";
-      const clavicle = p.clavicle[of];
-      const shoulder = p.shoulder[of];
-      const elbow = p.elbow[of];
-      // The gun arm is driven by the aim instead of the pose.
-      const aiming = aim !== null && i === 1;
-      // Straight out in front at rest (x = π/2), rising and falling with pitch.
-      const shoulderX = aiming ? Math.PI / 2 + aim() : shoulder.x;
-      const shoulderZ = aiming ? 0.12 : shoulder.spread * side;
-      a.clavicleX[i] = to(a.clavicleX[i], clavicle.x);
-      a.clavicleY[i] = to(a.clavicleY[i], clavicle.twist * side);
-      a.clavicleZ[i] = to(a.clavicleZ[i], clavicle.spread * side);
-      a.shoulderX[i] = to(a.shoulderX[i], shoulderX);
-      a.shoulderY[i] = to(a.shoulderY[i], aiming ? 0 : shoulder.twist * side);
-      a.shoulderZ[i] = to(a.shoulderZ[i], shoulderZ);
-      a.elbowX[i] = to(a.elbowX[i], aiming ? 0 : elbow.x);
-      a.elbowY[i] = to(a.elbowY[i], aiming ? 0 : elbow.twist * side);
-      a.elbowZ[i] = to(a.elbowZ[i], aiming ? 0 : elbow.spread * side);
-      a.hipX[i] = to(a.hipX[i], p.hip.x);
-      a.hipY[i] = to(a.hipY[i], p.hip.twist * side);
-      a.hipZ[i] = to(a.hipZ[i], p.hip.spread * side);
-      a.kneeX[i] = to(a.kneeX[i], p.knee.x);
-      a.kneeY[i] = to(a.kneeY[i], p.knee.twist * side);
-      a.kneeZ[i] = to(a.kneeZ[i], p.knee.spread * side);
-    }
+    const standing = typeof upright === "function" ? upright() : upright;
+    flat.current.slerp(flatFor(p.flat, on, standing), 1 - Math.exp(-POSE_DAMP * delta));
 
     const g = root.current;
     if (g) {
@@ -225,7 +230,30 @@ export function StickFigure({
       g.quaternion.copy(flat.current).multiply(crumple);
     }
 
-    applyPose(chain, a);
+    // **The walk rides on the standing pose and nothing else.** A body lying
+    // flat or holding a wall has no ground under it to push against, and every
+    // other pose is a shape somebody chose to hold still in.
+    const w = walk.current;
+    const phase = gait ? gait() : 0;
+    // Primed on the first frame, or a figure that mounts with a non-zero
+    // odometer behind it reads the whole of it as one frame of walking.
+    if (!w.primed) {
+      w.last = phase;
+      w.primed = true;
+    }
+    const moving = phase - w.last > WALK_EPSILON;
+    w.last = phase;
+    w.phase = phase;
+    const walkable = which === 0 && on === CLING_NONE;
+    w.amp = THREE.MathUtils.damp(w.amp, walkable && moving ? 1 : 0, WALK_DAMP, delta);
+
+    if (w.amp <= WALK_EPSILON) {
+      applyPose(chain, a);
+      return;
+    }
+    copyAngles(a, posed.current);
+    addWalk(posed.current, w.phase, w.amp, aim !== null);
+    applyPose(chain, posed.current);
   });
 
   if (!rig) return null;

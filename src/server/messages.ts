@@ -60,7 +60,14 @@ const MIN_WHISTLE_GAP_MS = WHISTLE_INTERVAL_MS * WHISTLE_TOLERANCE;
 const MAX_GRAVES = 200;
 
 type ChatMsg = { text?: unknown };
-type StateMsg = { p?: unknown; yaw?: unknown; pitch?: unknown; pose?: unknown; cling?: unknown };
+type StateMsg = {
+  p?: unknown;
+  yaw?: unknown;
+  pitch?: unknown;
+  pose?: unknown;
+  cling?: unknown;
+  upright?: unknown;
+};
 type PaintMsg = { strokes?: unknown };
 type KillMsg = { id?: unknown; position?: unknown };
 type ShootMsg = { position?: unknown; rotation?: unknown; origin?: unknown };
@@ -107,6 +114,9 @@ export function registerMessages(room: GameRoom) {
       player.role === "chameleon"
         ? clamp(Math.trunc(msg.cling as number), CLING_NONE, CLING_CEILING)
         : CLING_NONE;
+    // `=== true` rather than a cast: anything else off the wire — a string, a
+    // number, undefined — is a body that lies flat, which is the default.
+    player.upright = msg.upright === true;
   });
 
   // Paint is cosmetic and self-applied: it is stored on the painter and

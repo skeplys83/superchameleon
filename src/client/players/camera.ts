@@ -14,9 +14,36 @@ const toSettled = new THREE.Vector3();
 /** Scratch for the ground probe, which starts a little above the lens. */
 const probe = new THREE.Vector3();
 const DOWN = new THREE.Vector3(0, -1, 0);
+const UP = new THREE.Vector3(0, 1, 0);
 /** How far above the lens the ground probe starts, so a lens already a hair
  *  under the surface still finds it. */
 const PROBE_RISE = 0.5;
+
+/**
+ * Put the lens at a given height **without taking it off its orbit**: the lift
+ * or the drop comes out of the *horizontal* leg, so the distance to the body —
+ * and therefore the framing — is preserved and the camera slides around its own
+ * sphere. Writing `settled.y` outright instead shortens the leg to the body and
+ * takes the lens off the orbit, which is the "stuck camera" that further mouse
+ * movement could not budge. Only the degenerate case, straight up or straight
+ * down, has no horizontal leg to lengthen and has to do exactly that.
+ *
+ * Reads `lookAt`, `toCamera` and `held`; writes `settled`.
+ */
+function seatAt(y: number) {
+  const rise = y - lookAt.y;
+  const flat = Math.sqrt(Math.max(0, held * held - rise * rise));
+  const spread = Math.hypot(toCamera.x, toCamera.z);
+  if (spread > 1e-4 && flat > 1e-4) {
+    settled.set(
+      lookAt.x + (toCamera.x / spread) * flat,
+      y,
+      lookAt.z + (toCamera.z / spread) * flat,
+    );
+  } else {
+    settled.y = y;
+  }
+}
 
 /**
  * Last frame's distance. Only the *distance* is smoothed — the camera itself is
@@ -106,20 +133,27 @@ export function followThirdPerson(
     ray.far = PROBE_RISE + CAMERA_SKIN;
     const ground = ray.intersectObjects(shell, false)[0];
     const lowest = ground ? ground.point.y + CAMERA_SKIN : -Infinity;
-    if (settled.y < lowest) {
-      const rise = lowest - lookAt.y;
-      const flat = Math.sqrt(Math.max(0, held * held - rise * rise));
-      const spread = Math.hypot(toCamera.x, toCamera.z);
-      if (spread > 1e-4 && flat > 1e-4) {
-        settled.set(
-          lookAt.x + (toCamera.x / spread) * flat,
-          lowest,
-          lookAt.z + (toCamera.z / spread) * flat,
-        );
-      } else {
-        // Straight up or straight down: there is no horizontal leg to lengthen.
-        settled.y = lowest;
-      }
+    if (settled.y < lowest) seatAt(lowest);
+  }
+
+  // **The lens never rises above the roof over the player.** The segment test
+  // below is the general answer and it is still there, but it can only refuse a
+  // seat the *straight line from the body* actually reaches through something:
+  // the hospital is roofed in patches, so a camera swinging up and back can
+  // leave a room through an open side and come down on top of the roof next
+  // door with clear line of sight the whole way. Nothing is being clipped, and
+  // the shot is still of a rooftop.
+  //
+  // So the ceiling is measured where it matters — straight up from the body —
+  // and becomes a ceiling for the lens too. No roof overhead, no cap: outdoors
+  // and in the open the camera is as free as it ever was.
+  if (shell.length) {
+    ray.set(lookAt, UP);
+    ray.far = held + CAMERA_SKIN;
+    const roof = ray.intersectObjects(shell, false)[0];
+    if (roof) {
+      const highest = roof.point.y - CAMERA_SKIN;
+      if (settled.y > highest) seatAt(highest);
     }
   }
 

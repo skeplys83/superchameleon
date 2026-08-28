@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { CLING_NONE } from "@/shared/protocol";
+import { CLING_CEILING, CLING_WALL } from "@/shared/protocol";
 
 /**
  * How a pose lies when it is on a flat surface, per pose.
@@ -12,57 +12,80 @@ import { CLING_NONE } from "@/shared/protocol";
  *   never stands up: a pose whose whole idea is being flat against a surface is
  *   flat against every one of them.
  *
- * `back` stands upright the moment it holds on to anything, because a body on
- * its back cannot grip a wall — or a ceiling.
+ * `back` stands upright to hold a **wall**, because a body on its back cannot
+ * grip one. A ceiling it lies against, the same way it lies on a floor.
  */
 export type FlatMode = "none" | "back" | "side";
 
+const X_AXIS = new THREE.Vector3(1, 0, 0);
 const Z_AXIS = new THREE.Vector3(0, 0, 1);
 const UPRIGHT = new THREE.Quaternion();
 
 /**
- * How a pose is turned, by whether it is lying on the floor or holding on to
- * something.
+ * How a pose is turned, by which surface it is against.
  *
- * **Only the floor is lain on.** A wall and a ceiling are both *held*, and a
- * body holds them the same way — which is the rule that finally made the corner
- * between them work. A `back` pose lying on a ceiling is long along its forward
- * axis, and you face a wall to climb it, so reaching the ceiling drove a
- * body-length of collider straight into that wall and jammed. Held upright, the
- * long axis is vertical and hangs into the room instead.
+ * **A ceiling is lain against, exactly as a floor is; only a wall is *held*.**
+ * That was not always so — both used to be held upright, because a `back` pose
+ * lying on a ceiling is long along its forward axis, you face a wall to climb
+ * one, and reaching the ceiling drove a body-length of collider straight into
+ * that wall and jammed. What made lying on a ceiling safe is the later rule in
+ * `poseExtents`: **the turned box supplies its vertical extent and nothing
+ * else**, so the footprint stays the standing one and there is no body-length
+ * left to swing into anything. A wall stays upright for a different and
+ * permanent reason — a body on its back cannot grip one.
  *
  * The figure faces **−Z** with its head at **+Y**.
  *
- * | mode | on the floor | held |
- * | ---- | ------------ | ---- |
- * | `back` | back down, head forward — π about (0, 1, −1) | upright |
- * | `side` | on its shoulder — `Rz(+π/2)` | the same |
+ * | mode | on the floor | on a ceiling | holding a wall |
+ * | ---- | ------------ | ------------ | -------------- |
+ * | `back` | back down, head forward — π about (0, 1, −1) | back **up**, head forward — `Rx(−π/2)` | upright |
+ * | `side` | on its shoulder — `Rz(+π/2)` | the same | the same |
  *
  * `back` on the floor is not a rotation about one axis, because it wants two
  * things at once. Tipping about X alone gets the back down and swings the head
  * to +Z, which is backwards; rolling about Z lays the body on its shoulder,
- * which is `side`.
+ * which is `side`. On a **ceiling** one axis is enough, and it is the tipping
+ * that failed on the floor: with the back going *up* rather than down, `Rx` is
+ * exactly the turn that also leaves the head forward. The two differ by a
+ * left-right flip, which is what lying on your back rather than your front is.
+ *
+ * `side` is the same turn on all three: its whole idea is being flat against a
+ * surface, its long axis is left-right rather than forward, and `Rz(+π/2)` puts
+ * the right shoulder up — which is the shoulder a ceiling is against.
  */
-const TURNS: Record<Exclude<FlatMode, "none">, { floor: THREE.Quaternion; held: THREE.Quaternion }> =
-  {
-    back: {
-      floor: new THREE.Quaternion().setFromAxisAngle(
-        new THREE.Vector3(0, 1, -1).normalize(),
-        Math.PI,
-      ),
-      held: UPRIGHT,
-    },
-    side: {
-      floor: new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.PI / 2),
-      // `side` holds on exactly as it lies: it never stands up at all.
-      held: new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.PI / 2),
-    },
-  };
+type Turns = { floor: THREE.Quaternion; ceiling: THREE.Quaternion; wall: THREE.Quaternion };
 
-/** How this pose sits on this surface. Identity when it does not turn at all. */
-export function flatFor(mode: FlatMode, cling: number): THREE.Quaternion {
-  if (mode === "none") return UPRIGHT;
-  return cling === CLING_NONE ? TURNS[mode].floor : TURNS[mode].held;
+const SIDE_TURN = new THREE.Quaternion().setFromAxisAngle(Z_AXIS, Math.PI / 2);
+
+const TURNS: Record<Exclude<FlatMode, "none">, Turns> = {
+  back: {
+    floor: new THREE.Quaternion().setFromAxisAngle(
+      new THREE.Vector3(0, 1, -1).normalize(),
+      Math.PI,
+    ),
+    ceiling: new THREE.Quaternion().setFromAxisAngle(X_AXIS, -Math.PI / 2),
+    wall: UPRIGHT,
+  },
+  side: {
+    floor: SIDE_TURN,
+    ceiling: SIDE_TURN,
+    // `side` holds on exactly as it lies: it never stands up at all.
+    wall: SIDE_TURN,
+  },
+};
+
+/**
+ * How this pose sits on this surface. Identity when it does not turn at all.
+ *
+ * **`upright` is the player's own X toggle** and beats everything: a pose that
+ * *can* lie flat does not always want to. The same flag reaches `poseExtents`
+ * and `poseCentre`, so the collider stands up with the figure rather than the
+ * body being drawn on its feet inside a box lying on the floor.
+ */
+export function flatFor(mode: FlatMode, cling: number, upright = false): THREE.Quaternion {
+  if (mode === "none" || upright) return UPRIGHT;
+  if (cling === CLING_WALL) return TURNS[mode].wall;
+  return cling === CLING_CEILING ? TURNS[mode].ceiling : TURNS[mode].floor;
 }
 
 const spun = new THREE.Vector3();

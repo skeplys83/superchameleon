@@ -123,8 +123,8 @@ export const POSES: Pose[] = [
     },
     // The rig's two hip bones share one origin, so a leg with no spread lands
     // exactly on top of its twin. Every upright pose has to part them itself.
-    hip: { x: 0, spread: 0.38, twist: 0 },
-    knee: { x: 0, spread: -0.38, twist: 0 },
+    hip: { x: 0, spread: 0.30, twist: 0 },
+    knee: { x: 0, spread: -0.30, twist: 0 },
   },
   {
     key: "reach",
@@ -232,19 +232,20 @@ export const POSES: Pose[] = [
   {
     key: "curl",
     label: "Curl up",
-    // A crouch-sized block around the torso, which the curl carries forward
-    // and up — hence the centre. Knees, elbows and the back of the head are
-    // outside it on purpose; the silhouette is 1.26 x 0.57 x 1.00.
+    // A crouch-sized block around the torso. Knees, elbows and the back of the
+    // head are outside it on purpose; the silhouette measures 0.72 x 0.58 x 1.00.
     //
-    // **`centre.y` tracks `offsetY`.** The box is 0.56 tall against a 0.57
-    // silhouette, so it wraps the ball almost exactly — but only if it is
-    // shifted by as much as the figure itself is. It used to sit at half the
-    // figure's shift, which hung 0.075 of empty box under the body: the pose
-    // change keeps the box's *underside* put (`Player.tsx`), so the body was
-    // seated on a floor its own feet were not touching, and a curled chameleon
-    // floated.
+    // **The centre is where the body's mass actually is, measured** — not the
+    // figure's own shift repeated. `offsetY`/`offsetZ` already move the figure
+    // so that a curl which throws the torso forward and up comes back over its
+    // own origin; adding that shift to the box as well counts it twice. It was
+    // `[0, 0.15, 0.18]`, which is `offsetY` exactly and two thirds of
+    // `offsetZ` — a box sitting 0.08 above and 0.19 behind the ball it was
+    // supposed to wrap, so a curled chameleon had a third of itself under the
+    // floor and its collider out behind it. `test/posedBounds.test.ts` pins
+    // this against the real mesh now, which is what stops the next guess.
     half: [0.24, 0.28, 0.24],
-    centre: [0, 0.15, 0.18],
+    centre: [0, 0.074, 0],
     flat: "none",
     rootX: 0,
     offsetY: 0.15,
@@ -326,12 +327,14 @@ export function poseExtents(
   role: [hx: number, hy: number, hz: number],
   /** What the body is clinging to, from `shared/protocol`. */
   cling: number = CLING_NONE,
+  /** The player's X toggle: keep a pose that could lie flat on its feet. */
+  upright = false,
 ): [number, number, number] {
   const i = safePose(pose);
   // Pose 0 is the standing body, which `BODY` already states at its own scale.
   if (i === 0) return role;
   const half = atScale(role[1] / FITTED_HY)[i].half;
-  const turned = turnHalf(half, flatFor(POSES[i].flat, cling));
+  const turned = turnHalf(half, flatFor(POSES[i].flat, cling, upright));
   // **Only the vertical extent is taken from the turned box.** Horizontally it
   // stays the standing footprint, which is the one shape already known to fit
   // everywhere the body can be.
@@ -358,11 +361,12 @@ export function poseCentre(
   /** The body's half-height, so the offset scales with it. */
   hy: number = FITTED_HY,
   cling: number = CLING_NONE,
+  upright = false,
 ): readonly [number, number, number] {
   const i = safePose(pose);
   if (i === 0) return ORIGIN;
   const centre = atScale(hy / FITTED_HY)[i].centre;
-  return turnCentre(centre, flatFor(POSES[i].flat, cling));
+  return turnCentre(centre, flatFor(POSES[i].flat, cling, upright));
 }
 
 const ORIGIN = [0, 0, 0] as const;

@@ -44,10 +44,9 @@ export type Surface = {
 type Pad = {
   size: number;
   covered: Uint8Array;
-  /** Uncovered, but within `PAD_TEXELS` of something covered — the strip each
-   *  dab floods into. Held apart from the far gutter so `settleGutter` can fill
-   *  the rest without erasing it. */
-  near: Uint8Array;
+  /** Reused by `settleGutter`, which is a breadth-first walk of the whole
+   *  atlas and would otherwise allocate four megabytes every time it runs. */
+  queue: Int32Array;
 };
 
 /** How far paint is pushed into the gutter. Enough for bilinear and the first
@@ -244,83 +243,73 @@ function coverage(s: Surface, size: number): Pad {
     }
   }
 
-  // The strip a dab is allowed to flood into, found once: every uncovered texel
-  // within `PAD_TEXELS` of the body. `settleGutter` fills what is left over.
-  const near = new Uint8Array(size * size);
-  let frontier: number[] = [];
-  for (let i = 0; i < covered.length; i++) if (covered[i]) frontier.push(i);
-  for (let step = 0; step < PAD_TEXELS && frontier.length; step++) {
-    const next: number[] = [];
-    for (const i of frontier) {
-      const x = i % size;
-      const y = (i / size) | 0;
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || ny < 0 || nx >= size || ny >= size) continue;
-          const n = ny * size + nx;
-          if (covered[n] || near[n]) continue;
-          near[n] = 1;
-          next.push(n);
-        }
-      }
-    }
-    frontier = next;
-  }
-
-  s.pad = { size, covered, near };
+  s.pad = { size, covered, queue: new Int32Array(size * size) };
   return s.pad;
 }
 
 /**
- * Paint the *far* gutter — everything the dab flood never reaches — the average
- * of what is on the body.
+ * Grow the body outward across the whole atlas: every texel off the model takes
+ * the colour of the nearest texel on it.
  *
  * **Padding alone cannot fix a mipmapped atlas.** The flood in `dab` reaches
- * `PAD_TEXELS`, which covers bilinear and the first couple of mip levels. A
- * hunter sees the world at `HUNT_DPR`, where the figure is about sixty pixels
- * tall against a 1024 atlas — mip four, where one texel is an average of
- * sixteen by sixteen. At that depth the gutter is most of what is being
- * averaged, and since a blank canvas is white, a body painted black comes back
- * ringed in white speckle: the one artefact that survives the blur the hunt is
- * built on.
+ * `PAD_TEXELS`, which covers bilinear and the first couple of mip levels — but
+ * the unwrap covers only about a quarter of the texture, so that flood is under
+ * a tenth of the gutter. Everything past it is still whatever the canvas was
+ * cleared to, and a hunter sees the world at `HUNT_DPR`, where the figure is
+ * about sixty pixels tall against a 1024 atlas — mip four, where one texel is
+ * an average of sixteen by sixteen. At that depth the gutter is most of what is
+ * being averaged, and since a blank canvas is white, a body painted black comes
+ * back ringed in white speckle.
  *
- * So the far gutter is made to converge on the body's own colour instead of on
- * white. Deep mips then fade the figure into itself rather than into a halo.
+ * This used to fill that far gutter with **one average of the whole body**,
+ * which fails on any body that is not one colour: a chameleon with black legs
+ * and unpainted white arms averages to pale grey, so the legs sat in a pale
+ * field and every seam and silhouette wore a thin light stripe wherever
+ * anisotropy or a mip reached seven texels off the island. The fix is the
+ * standard one and it is not an average at all — dilate. A nearest-body colour
+ * everywhere means a deep mip averages the body against more of the same body,
+ * whatever is painted where.
  *
+ * A breadth-first walk of the atlas from every covered texel at once, so the
+ * colour a gutter texel inherits is the nearest one by chessboard distance.
  * Costly enough to be worth doing on a debounce rather than per dab — see
- * `skin.ts`. Returns false when there is nothing painted to average.
+ * `skin.ts`. Returns false when the model covers nothing.
  */
 export function settleGutter(s: Surface, image: ImageData): boolean {
   const size = image.width;
   const pad = coverage(s, size);
   const data = image.data;
+  const queue = pad.queue;
 
-  let r = 0;
-  let g = 0;
-  let b = 0;
-  let n = 0;
-  for (let i = 0; i < pad.covered.length; i++) {
-    if (!pad.covered[i]) continue;
-    const p = i * 4;
-    r += data[p];
-    g += data[p + 1];
-    b += data[p + 2];
-    n += 1;
-  }
-  if (!n) return false;
-  const ar = (r / n) | 0;
-  const ag = (g / n) | 0;
-  const ab = (b / n) | 0;
+  let tail = 0;
+  for (let i = 0; i < pad.covered.length; i++) if (pad.covered[i]) queue[tail++] = i;
+  if (!tail) return false;
 
-  for (let i = 0; i < pad.covered.length; i++) {
-    if (pad.covered[i] || pad.near[i]) continue;
-    const p = i * 4;
-    data[p] = ar;
-    data[p + 1] = ag;
-    data[p + 2] = ab;
-    data[p + 3] = 255;
+  // `covered` doubles as the visited mark: a gutter texel is set the moment it
+  // is claimed, so the first island to reach it wins and nothing is queued twice.
+  const seen = pad.covered.slice();
+  for (let head = 0; head < tail; head++) {
+    const i = queue[head];
+    const x = i % size;
+    const y = (i / size) | 0;
+    const from = i * 4;
+    const x0 = x > 0 ? -1 : 0;
+    const x1 = x < size - 1 ? 1 : 0;
+    const y0 = y > 0 ? -1 : 0;
+    const y1 = y < size - 1 ? 1 : 0;
+    for (let dy = y0; dy <= y1; dy++) {
+      for (let dx = x0; dx <= x1; dx++) {
+        const n = (y + dy) * size + (x + dx);
+        if (seen[n]) continue;
+        seen[n] = 1;
+        const to = n * 4;
+        data[to] = data[from];
+        data[to + 1] = data[from + 1];
+        data[to + 2] = data[from + 2];
+        data[to + 3] = 255;
+        queue[tail++] = n;
+      }
+    }
   }
   return true;
 }

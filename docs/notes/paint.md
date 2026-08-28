@@ -77,6 +77,16 @@ from `skin.ts`; `Brush` / `DEFAULT_BRUSH` from
    one-time map picks a winner in advance, and when the *other* island is the
    one being painted the seam comes back. Measured: a precomputed map left 3.6%
    of island-edge gutter texels bare, and flooding per dab leaves 0.00%.
+
+   **Six texels is not the whole gutter, and the rest is a dilation.** The
+   unwrap covers about a quarter of the atlas, so the per-dab flood reaches
+   under a tenth of what is off the body; `settleGutter` fills the remainder
+   on a debounce by breadth-first search from every covered texel at once,
+   giving each gutter texel the colour of the nearest texel on the model. It
+   filled that space with a single average of the body until Aug 2026, which is
+   correct only for a body painted one shade — black legs plus unpainted white
+   arms average to pale grey, and the legs came back wearing a thin light stripe
+   along every seam wherever a mip or anisotropy reached past the pad.
 6. **The brush edge is sharp.** `FEATHER` is 5% of the radius — about one texel
    at the default size — which exists only so the boundary is not a staircase of
    hard texels. It is not a soft brush and should not become one.

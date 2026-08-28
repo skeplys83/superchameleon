@@ -3,10 +3,17 @@ import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import * as THREE from "three";
 import { onRoster, remotes } from "@/client/net";
+import { CLING_NONE } from "@/shared/protocol";
+import { strideFor } from "@/client/sound/footsteps";
 import { BODY, BODY_SCALE } from "./body";
 
 /** How far the name badge floats above the top of the head, at full size. */
 const BADGE_GAP = 0.55;
+/** Vertical speed past which a remote body is falling rather than walking, in
+ *  units per second. Nobody's `grounded` is on the wire — this is the same kind
+ *  of guess `SoundStage` makes to keep a climber's footsteps quiet — and a ramp
+ *  taken at full speed stays well under it. */
+const AIRBORNE_DROP = 4;
 import { StickFigure } from "@/client/figure/StickFigure";
 import { Shotgun } from "@/client/combat/Shotgun";
 
@@ -32,6 +39,12 @@ function RemotePlayer({
   const role = remote?.role ?? "chameleon";
   const [, hy] = BODY[role];
   const settled = useRef(false);
+  /** This body's own odometer, in radians of walk cycle. `players/gait.ts` is
+   *  the local player's and nothing like it crosses the wire, so a remote's is
+   *  measured off the positions we are already interpolating between. */
+  const gait = useRef(0);
+  const lastPos = useRef(new THREE.Vector3());
+  const stride = strideFor(role);
 
   useEffect(() => {
     const g = group.current;
@@ -48,12 +61,27 @@ function RemotePlayer({
 
     targetPos.set(r.target.x, r.target.y, r.target.z);
     // Snap on the first frame so a joining player doesn't fly in from origin.
-    if (settled.current) {
+    const wasSettled = settled.current;
+    if (wasSettled) {
       g.position.lerp(targetPos, 1 - Math.pow(0.0000001, delta));
     } else {
       g.position.copy(targetPos);
       settled.current = true;
     }
+
+    // The walk cycle, from the distance the body has actually covered on screen.
+    // Horizontal only, and never while climbing or dropping — legs that keep
+    // striding through a fall are worse than legs that do not move at all. The
+    // snap frame is skipped or a joining player arrives mid-sprint.
+    if (wasSettled) {
+      const dx = g.position.x - lastPos.current.x;
+      const dy = g.position.y - lastPos.current.y;
+      const dz = g.position.z - lastPos.current.z;
+      const walking = r.target.cling === CLING_NONE && Math.abs(dy) < AIRBORNE_DROP * delta;
+      // One footfall is π, exactly as the local player's phase is measured.
+      if (walking) gait.current += (Math.hypot(dx, dz) / stride) * Math.PI;
+    }
+    lastPos.current.copy(g.position);
 
     // Only yaw here: a pose's roll is animated inside StickFigure.
     targetEuler.set(0, r.target.yaw, 0);
@@ -73,6 +101,8 @@ function RemotePlayer({
           // A getter, like `pose`: a network patch mutates `target` in place
           // and deliberately does not re-render this tree.
           surface={() => remote.target.cling}
+          gait={() => gait.current}
+          upright={() => remotes.get(id)?.target.upright ?? false}
           pose={() => remotes.get(id)?.target.pose ?? 0}
           skinId={id}
           aim={

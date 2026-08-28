@@ -4,6 +4,7 @@ import * as THREE from "three";
 import type { Role } from "@/shared/protocol";
 import { resolveShot } from "@/client/combat/shoot";
 import { kickViewmodel } from "@/client/combat/recoil";
+import { muzzleAt } from "@/client/combat/muzzle";
 import { sendKill, sendPaint, sendShoot } from "@/client/net";
 import { setLockTarget } from "@/client/players/pointerLock";
 import { createBrushCursor, type BrushCursor } from "@/client/paint/brushCursor";
@@ -29,6 +30,20 @@ import { newLook, type Look } from "./look";
 
 const ZOOM_MIN = 1.2;
 const ZOOM_MAX = 14;
+/**
+ * Where the camera sits in paint mode.
+ *
+ * The default 7 frames a body against the room, which is the right shot for
+ * hiding in it and the wrong one for painting a shoulder: the brush ring is a
+ * fraction of a figure that is a fraction of the screen. Pulling in to about
+ * two body-lengths puts the figure across most of the view without going so
+ * close that a stroke is drawn on a surface you cannot see the shape of.
+ *
+ * **It only ever pulls in.** A player who had already zoomed closer than this
+ * chose that, and shoving them back out to a "closer" camera is not what the
+ * mode is for.
+ */
+const PAINT_ZOOM = 2.8;
 const ZOOM_STEP = 0.0022; // per wheel pixel
 const MOUSE_SENSITIVITY = 0.0022;
 /**
@@ -57,7 +72,6 @@ type Options = {
   frozen: boolean;
   picking: boolean;
   onPicked?: (hex: string) => void;
-  onHoverBody: (hovering: boolean) => void;
   visual: React.RefObject<THREE.Group | null>;
   ring: React.RefObject<THREE.Mesh | null>;
   solids: React.RefObject<THREE.Object3D[]>;
@@ -81,7 +95,6 @@ export function usePointerControls({
   frozen,
   picking,
   onPicked,
-  onHoverBody,
   visual,
   ring,
   solids,
@@ -103,8 +116,6 @@ export function usePointerControls({
   const sizing = useRef<{ x: number; size: number } | null>(null);
   /** When the shotgun last went off, so a held mouse button is one shot. */
   const lastShot = useRef(0);
-  const hovering = useRef(false);
-  const hoverRef = useRef<((hovering: boolean) => void) | null>(null);
 
   const brushRef = useRef(brush);
   const onBrushRef = useRef(onBrush);
@@ -172,13 +183,32 @@ export function usePointerControls({
     };
   }, [picking, onPicked]);
 
+  /** The zoom paint mode borrowed, so leaving hands it back. */
+  const zoomBefore = useRef<number | null>(null);
+
   useEffect(() => {
     paintingRef.current = painting;
     if (!painting) {
       cursor.current?.cancel();
       hint.current?.setVisible(false);
     }
-  }, [painting]);
+
+    // **Paint mode moves the camera in.** `followThirdPerson` snaps inwards and
+    // eases outwards — the same asymmetry the wheel already has — so this reads
+    // as stepping up to the body and strolling back off it.
+    //
+    // The zoom is *borrowed*: what the player was looking at the room from is
+    // put back when they leave, rather than the mode quietly redefining their
+    // camera for the rest of the round. Anything they scroll to while painting
+    // belongs to the mode and goes with it.
+    if (painting) {
+      if (zoomBefore.current === null) zoomBefore.current = look.current.zoom;
+      look.current.zoom = Math.min(look.current.zoom, PAINT_ZOOM);
+    } else if (zoomBefore.current !== null) {
+      look.current.zoom = zoomBefore.current;
+      zoomBefore.current = null;
+    }
+  }, [painting, look]);
 
   useEffect(() => {
     pausedRef.current = paused;
@@ -188,17 +218,7 @@ export function usePointerControls({
     cursor.current?.cancel();
     hint.current?.setVisible(false);
     look.current.orbiting = false;
-    hoverRef.current?.(false);
   }, [paused, look]);
-
-  useEffect(() => {
-    // Only report changes: this runs on every mouse move.
-    hoverRef.current = (next: boolean) => {
-      if (hovering.current === next) return;
-      hovering.current = next;
-      onHoverBody(next);
-    };
-  }, [onHoverBody]);
 
   // Strokes go out in batches: a drag produces far more points than are worth
   // a message each.
@@ -219,8 +239,9 @@ export function usePointerControls({
 
     // Shown with the brush ring, and nowhere else: hovering your own body is
     // the moment somebody is thinking about colour, and the eyedropper is
-    // otherwise a button you have to already know about.
-    const label = createCursorHint("F to pick a colour");
+    // otherwise a button you have to already know about. The ring only appears
+    // in paint mode now, which is the only place the key works either.
+    const label = createCursorHint("G to pick a colour");
     hint.current = label;
 
     const brushCursor = createBrushCursor({
@@ -298,13 +319,18 @@ export function usePointerControls({
         return;
       }
 
-      // Only the hunter takes the pointer lock — a chameleon keeps their cursor so
-      // the brush and the palette are always to hand.
-      if (role === "chameleon") return;
+      // **Both roles take the lock**, so a click back into the world is the way
+      // back in for either of them — the browser throttles repeated lock
+      // requests after an Esc, and without a click there is a window where the
+      // effect's retries are refused and nothing else asks.
       if (!look.current.locked) {
         if (!paintingRef.current) canvas.requestPointerLock();
         return;
       }
+
+      // Past here the pointer is captured and the click is a trigger pull, and
+      // only one of the two roles has a trigger.
+      if (role === "chameleon") return;
 
       // A pump-action needs pumping. The trigger-pull is what is rate-limited,
       // not the hit — clicking faster than this simply does nothing, rather than
@@ -322,7 +348,16 @@ export function usePointerControls({
       if (shot.kind === "player") sendKill(shot.id, shot.point);
       // The server relays the mark back to everyone, this client included, so
       // every player sees the same patch appear.
-      else sendShoot(shot.position, shot.rotation, shot.origin);
+      //
+      // **The tracer is drawn from the barrel, not from the eye.** `shot.origin`
+      // is where the shot was *cast* from — the camera, through the centre of
+      // the screen — and that is still what decides what was hit. But the
+      // camera sits behind your eyes, so a beam drawn from it came out of the
+      // middle of your face with the gun in your hands doing nothing. The
+      // muzzle is one frame stale and about a metre away; at that range the
+      // difference is invisible to everyone else and it is the whole effect for
+      // the hunter. Null when there is no viewmodel on screen to have a barrel.
+      else sendShoot(shot.position, shot.rotation, muzzleAt() ?? shot.origin);
     };
 
     const onPointerUp = () => {
@@ -407,8 +442,8 @@ export function usePointerControls({
         return;
       }
 
-      // A free cursor means the body can be painted, so keep the brush ring on
-      // whatever it is over and tell the HUD, which pops the palette open.
+      // A free cursor means paint mode, which is the only thing that hands one
+      // back — so keep the brush ring on whatever it is over.
       if (
         !frozenRef.current &&
         !look.current.locked &&
@@ -416,13 +451,11 @@ export function usePointerControls({
         !pickingRef.current
       ) {
         const overBody = brushCursor.move(e);
-        hoverRef.current?.(overBody);
         // The label rides with the ring: same condition, same moment.
         label.move(e.clientX, e.clientY);
         label.setVisible(overBody);
       } else {
         brushCursor.cancel();
-        hoverRef.current?.(false);
         label.setVisible(false);
       }
 
