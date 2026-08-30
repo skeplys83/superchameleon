@@ -2,6 +2,15 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ColyseusTestServer } from "@colyseus/testing";
 import { bootTestServer, connected, heard, inner, roomOf, settle, told } from "./harness.ts";
 import { DEFAULT_MATCH_MAP } from "../../shared/mapIds.ts";
+import { mapLimit } from "../../shared/maps.ts";
+
+/**
+ * How far from the middle the server lets anything be, on the map these tests
+ * run on. Derived rather than typed out: the clamp is per map, so a literal
+ * here is really an assertion about which map is the default, and it broke the
+ * moment that changed.
+ */
+const LIMIT = mapLimit(DEFAULT_MATCH_MAP);
 
 let colyseus: ColyseusTestServer;
 
@@ -220,7 +229,9 @@ describe("a match", () => {
     await settle();
 
     const me = client.state.players.get(client.sessionId)!;
-    expect(Math.abs(me.x)).toBeLessThanOrEqual(40);
+    // Through `Math.fround`, because the schema field is a float32: the clamp
+    // lands exactly on the limit and storing it rounds the last bit *up*.
+    expect(Math.abs(me.x)).toBeLessThanOrEqual(Math.fround(LIMIT));
     expect(me.y).toBeLessThanOrEqual(30);
     // A NaN written into schema propagates to every client, so it becomes 0.
     expect(Number.isFinite(me.yaw)).toBe(true);
@@ -289,9 +300,9 @@ describe("a shot", () => {
 
     expect(marks.length).toBe(1);
     const [x, y, z] = marks[0].position;
-    expect(Math.abs(x)).toBeLessThanOrEqual(40);
+    expect(Math.abs(x)).toBeLessThanOrEqual(LIMIT);
     expect(y).toBeLessThanOrEqual(30);
-    expect(Math.abs(z)).toBeLessThanOrEqual(40);
+    expect(Math.abs(z)).toBeLessThanOrEqual(LIMIT);
     expect(Math.abs(marks[0].rotation[0])).toBeLessThanOrEqual(Math.PI * 2);
   });
 });

@@ -176,7 +176,11 @@ mechanism and the prose that explains it; the component is now composition.
   handler**, parked on `about:blank` until there is a code — one opened later
   from the effect is outside the gesture and every browser blocks it. Nothing
   about the server changes for it, and nothing may: a solo version means forking
-  `MIN_PLAYERS` and the win conditions, and the draw stays the server's.
+  `MIN_PLAYERS` and the win conditions, and the draw stays the server's. **Its
+  `QUICK_PLAY_MAP` is named rather than `DEFAULT_MATCH_MAP`**: the button exists
+  to reach whatever is being worked on, which is not what an unspecified match
+  should fall back to, and the file is dropped from a production build so it may
+  name a `DEV_ONLY_MAPS` entry as freely as a shipped one.
 - **Developer mode is `import.meta.env.DEV`** and must not be reachable in
   production — not by an env var, not by a query parameter, not by a key. The
   point of tying it to the build is that there is no switch to find.

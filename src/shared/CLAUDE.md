@@ -44,7 +44,14 @@ doc names the constant beside the number for exactly this reason.
   calls with `DEV` — vite substitutes that, so in the image the entry is dead
   code. The server keeps accepting the id: it cannot tell which build asked, and
   a second source of truth for "is this map real" is worse than a menu that
-  simply does not offer one.
+  simply does not offer one. **It is empty today** — the hospital was the last
+  entry and now ships — and the set stays for the next unfinished map.
+- **`MAP_IDS` is the display order; `DEFAULT_MATCH_MAP` is named separately.**
+  The hospital is both the head of the list and the default, and that is a
+  coincidence to keep coincidental: reordering the menu decides what a player
+  sees first, not where a match with no map asked for ends up, and the default
+  additionally has to be a map every build ships — which the head of the list is
+  not guaranteed to be.
 - **`MESSAGES` is the whole wire vocabulary**, split into `toServer` and
   `toClient` because four names (`paint`, `chat`, `whistle`, `clearSkin`) travel
   each way with different payloads — Colyseus keeps the two directions in

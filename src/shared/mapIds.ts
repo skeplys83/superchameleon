@@ -15,9 +15,11 @@ export const MATCH_MAP_IDS = MAP_IDS.filter((id) => id !== LOBBY_MAP);
 /**
  * What a match runs when nobody chose, or chose something this build lacks.
  *
- * **Named rather than taken from the head of `MATCH_MAP_IDS`.** The hospital
- * sits first there now, and it is in `DEV_ONLY_MAPS` — a production client that
- * fell back to the head of the list would be sent to a map its own menus refuse
- * to offer. The default has to be a map every build ships.
+ * **Named rather than taken from the head of `MATCH_MAP_IDS`.** It is the head
+ * today, but that order is a display order — where a map sits in the menu is a
+ * decision about what a player sees first, not about where an unspecified match
+ * ends up, and the two drifting apart should take an edit rather than happen by
+ * itself. The default also has to be a map every build ships, which the head of
+ * the list is not guaranteed to be.
  */
-export const DEFAULT_MATCH_MAP: MapId = "dungeon";
+export const DEFAULT_MATCH_MAP: MapId = "hospital";

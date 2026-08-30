@@ -143,7 +143,9 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
   `kill` refused during the reveal, a `NaN` position clamped rather than
   encoded, and what `shoot` is allowed to relay: a well-formed mark passes
   through, a payload that is not three vectors is refused outright (not even the
-  bang), and a wild one is bounded to the map first. It reads the relays through
+  bang), and a wild one is bounded to the map first — against
+  `mapLimit(DEFAULT_MATCH_MAP)` rather than a number, since the bound is per map
+  and a literal there is really an assertion about which map is the default. It reads the relays through
   `told()` in the harness, since a mark is kept nowhere either.
 
 `clean.test.ts` pins the three decisions on top of the word list — mask chat,

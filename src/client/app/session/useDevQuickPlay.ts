@@ -7,9 +7,10 @@ import { MIN_PLAYERS } from "@/shared/protocol";
 
 /**
  * The map Quick play opens, named rather than taken from `DEFAULT_MATCH_MAP`:
- * this button exists to get to the map being worked on, and the default is the
- * one every build ships. Both are dev-only, so pointing it at a `DEV_ONLY_MAPS`
- * entry is fine — the whole file is dropped from a production build.
+ * this button exists to get to the map being worked on, which is not always
+ * what an unspecified match falls back to. The whole file is dropped from a
+ * production build, so it may name a `DEV_ONLY_MAPS` entry as freely as a
+ * shipped one.
  */
 const QUICK_PLAY_MAP: MapId = "hospital";
 

@@ -196,13 +196,17 @@ export const MATCH_MAP_LIST: GameMap[] = MATCH_MAP_IDS.map((id) => MAPS[id]);
 /**
  * Maps that are still being built, and are offered only by a dev build.
  *
+ * **Empty today** — the hospital was the last one in it and now ships. The set
+ * stays because it is how the next unfinished map is held back: add its id and
+ * every picker drops it, with no other edit anywhere.
+ *
  * The server still accepts them — it has no idea which build asked, and a
  * second source of truth for "is this map real" is worse than a menu that does
  * not offer one. This is about what a player is shown, the same way Quick play
  * is: `DEV` is substituted by vite, so in the image the entry is dead code and
  * the map is unreachable from the UI.
  */
-export const DEV_ONLY_MAPS: ReadonlySet<MapId> = new Set<MapId>(["hospital"]);
+export const DEV_ONLY_MAPS: ReadonlySet<MapId> = new Set<MapId>();
 
 /** The match maps a build may offer. Pass `DEV` from `app/dev.ts`. */
 export const playableMaps = (dev: boolean): GameMap[] =>
