@@ -2,7 +2,17 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { recentColors, subscribeColors, WHITE } from "@/client/paint/palette";
 import { MAX_SIZE, MIN_SIZE, type Brush } from "./brush";
 
-const WHEEL = 208;
+/**
+ * The wheel's *backing* resolution, and nothing to do with how big it is drawn.
+ *
+ * **It used to be both**, at 208, which was also exactly the panel's inner
+ * width — `w-[14.5rem]` is 232px and `p-3` takes 24 of them. Two numbers in
+ * different files that had to agree to the pixel, with no slack: the wheel
+ * spilled past the panel the moment either moved. It is laid out at `w-full`
+ * now and cannot overflow whatever the panel is; this only decides how many
+ * pixels the gradient is generated at.
+ */
+const WHEEL = 256;
 
 /** One channel of HSV→RGB, 0..1. Kept numeric and separate from the hex form:
  *  the wheel redraws whole every time the brightness moves, and going through a
@@ -100,20 +110,21 @@ function ColorWheel({
     onPick(hue, Math.min(1, Math.hypot(dx, dy) / radius));
   };
 
+  // In per cent, not pixels: the wheel is laid out fluid, so the marker has to
+  // be too or it drifts off the colour it is pointing at at any other size.
   const angle = h * Math.PI * 2;
   const marker = {
-    left: WHEEL / 2 + Math.cos(angle) * s * (WHEEL / 2),
-    top: WHEEL / 2 + Math.sin(angle) * s * (WHEEL / 2),
+    left: `${50 + Math.cos(angle) * s * 50}%`,
+    top: `${50 + Math.sin(angle) * s * 50}%`,
   };
 
   return (
-    <div className="relative" style={{ width: WHEEL, height: WHEEL }}>
+    <div className="relative aspect-square w-full">
       <canvas
         ref={canvas}
         width={WHEEL}
         height={WHEEL}
-        className="cursor-crosshair touch-none rounded-full"
-        style={{ width: WHEEL, height: WHEEL }}
+        className="h-full w-full cursor-crosshair touch-none rounded-full"
         onPointerDown={(e) => {
           dragging.current = true;
           e.currentTarget.setPointerCapture(e.pointerId);
@@ -161,10 +172,10 @@ export function PaintPanel({
     return (
       <button
         onClick={() => onOpenChange(true)}
-        className="absolute bottom-4 right-4 flex select-none items-center gap-2.5 rounded-lg bg-black/70 px-4 py-3 font-mono text-sm text-neutral-200 backdrop-blur transition hover:bg-black/80"
+        className="absolute bottom-4 right-4 flex select-none items-center gap-3 rounded-xl bg-black/70 px-5 py-3.5 font-mono text-base text-neutral-200 backdrop-blur transition hover:bg-black/80"
       >
         <span
-          className="h-4 w-4 rounded-full border border-white/40"
+          className="h-5 w-5 rounded-full border border-white/40"
           style={{ background: brush.color }}
         />
         Paint
@@ -174,14 +185,14 @@ export function PaintPanel({
 
   return (
     <div
-      className="absolute bottom-4 right-4 w-[232px] select-none rounded-lg bg-black/70 p-3 font-mono text-xs text-neutral-100 backdrop-blur"
+      className="absolute bottom-4 right-4 w-[19rem] select-none rounded-xl bg-black/70 p-4 font-mono text-sm text-neutral-100 backdrop-blur"
     >
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-3 flex items-center justify-between">
         <span className="uppercase tracking-widest text-neutral-400">Paint</span>
         <button
           onClick={() => onOpenChange(false)}
           title="Minimise"
-          className="flex h-7 w-8 items-center justify-center rounded border border-neutral-500 text-base leading-none text-neutral-100 transition hover:bg-neutral-600"
+          className="flex h-8 w-9 items-center justify-center rounded-md border border-neutral-500 text-lg leading-none text-neutral-100 transition hover:bg-neutral-600"
         >
           ▾
         </button>
@@ -194,7 +205,7 @@ export function PaintPanel({
         onPick={(hue, sat) => onBrush({ ...brush, color: hsvToHex(hue, sat, v || 1) })}
       />
 
-      <label className="mt-3 block text-[11px] uppercase tracking-wide text-neutral-400">
+      <label className="mt-4 block text-xs uppercase tracking-wide text-neutral-400">
         Brightness
         <input
           type="range"
@@ -203,10 +214,10 @@ export function PaintPanel({
           step={0.01}
           value={v}
           onChange={(e) => onBrush({ ...brush, color: hsvToHex(h, s, Number(e.target.value)) })}
-          className="mt-1 h-2 w-full cursor-pointer accent-neutral-200"
+          className="mt-1.5 h-2.5 w-full cursor-pointer accent-neutral-200"
         />
       </label>
-      <label className="mt-2 block text-[11px] uppercase tracking-wide text-neutral-400">
+      <label className="mt-3 block text-xs uppercase tracking-wide text-neutral-400">
         Brush size
         <input
           type="range"
@@ -215,21 +226,21 @@ export function PaintPanel({
           step={0.005}
           value={brush.size}
           onChange={(e) => onBrush({ ...brush, size: Number(e.target.value) })}
-          className="mt-1 h-2 w-full cursor-pointer accent-neutral-300"
+          className="mt-1.5 h-2.5 w-full cursor-pointer accent-neutral-300"
         />
       </label>
-      <p className="mt-1 text-[10px] leading-tight text-neutral-500">
+      <p className="mt-1.5 text-xs leading-tight text-neutral-500">
         or right-drag across your body
       </p>
 
       {/* The three actions, one row, one size. They were scattered — pick full
           width here, white and clear tucked in beside the size readout — which
           made three equal choices look like one heading and two footnotes. */}
-      <div className="mt-2.5 grid grid-cols-3 gap-1.5 text-[11px]">
+      <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <button
           onClick={() => onPickingChange(!picking)}
           title="Take a colour from the world (F)"
-          className={`flex h-8 items-center justify-center gap-1 rounded border transition ${
+          className={`flex h-10 items-center justify-center gap-1.5 rounded-md border transition ${
             picking
               ? "border-white bg-white/15 text-white"
               : "border-neutral-600 text-neutral-300 hover:bg-neutral-700"
@@ -242,14 +253,14 @@ export function PaintPanel({
         <button
           onClick={() => onBrush({ ...brush, color: WHITE })}
           title="Back to plain white"
-          className="flex h-8 items-center justify-center rounded border border-neutral-600 text-neutral-300 transition hover:bg-neutral-700"
+          className="flex h-10 items-center justify-center rounded-md border border-neutral-600 text-neutral-300 transition hover:bg-neutral-700"
         >
           white
         </button>
         <button
           onClick={onClear}
           title="Wipe the paint off your body"
-          className="flex h-8 items-center justify-center rounded border border-neutral-600 text-neutral-300 transition hover:bg-neutral-700"
+          className="flex h-10 items-center justify-center rounded-md border border-neutral-600 text-neutral-300 transition hover:bg-neutral-700"
         >
           clear
         </button>
@@ -259,17 +270,17 @@ export function PaintPanel({
           a row of placeholders is a row of buttons that do nothing. */}
       {recent.length > 0 && (
         <>
-          <div className="mt-2.5 text-[11px] uppercase tracking-wide text-neutral-400">
+          <div className="mt-3 text-xs uppercase tracking-wide text-neutral-400">
             Recent
           </div>
-          <div className="mt-1 grid grid-cols-5 gap-1.5">
+          <div className="mt-1.5 grid grid-cols-5 gap-2">
             {recent.map((hex) => (
               <button
                 key={hex}
                 onClick={() => onBrush({ ...brush, color: hex })}
                 title={hex}
                 style={{ background: hex }}
-                className={`h-7 rounded border transition ${
+                className={`h-9 rounded-md border transition ${
                   brush.color.toLowerCase() === hex
                     ? "border-white"
                     : "border-white/20 hover:border-white/60"
@@ -280,13 +291,13 @@ export function PaintPanel({
         </>
       )}
 
-      <div className="mt-2.5 flex items-center gap-2 text-[11px] text-neutral-400">
+      <div className="mt-3 flex items-center gap-2.5 text-xs text-neutral-400">
         <span
           className="rounded-full border border-white/30"
           style={{
             background: brush.color,
-            width: 6 + brush.size * 44,
-            height: 6 + brush.size * 44,
+            width: 8 + brush.size * 56,
+            height: 8 + brush.size * 56,
           }}
         />
         {brush.color}

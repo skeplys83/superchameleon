@@ -26,10 +26,10 @@ public/maps/<id>.glb     the committed artefact. The game loads only this.
 ```
 
 **One folder per level, named after it**, holding the `.blend` and everything it
-references — `textures/`, the raw kit, the bake stamps. That is the only shape
-the export looks for, and there are three reasons for it: image paths stay
-relative so a level opens on any checkout, `bake-material.py` writes beside the
-`.blend` it was given, and one map's assets can never be mistaken for another's.
+references — `textures/` and the raw kit. That is the only shape the export
+looks for, and there are two reasons for it: image paths stay relative so a
+level opens on any checkout, and one map's assets can never be mistaken for
+another's.
 
 **Nothing of a level may live under `public/`.** That directory is copied
 verbatim into `dist/`, so a `.blend` parked there ships to every player — 140 MB
@@ -71,96 +71,145 @@ It also refuses to write a file with no collision objects at all, and warns when
 a level suddenly exports at more than twice its previous size — which is what a
 palette leak looks like from outside.
 
-### Baked procedural surfaces
+### Retexturing a kit that ships one atlas
 
-A material carrying a **`tile_period`** custom property is a baked procedural.
-The dungeon's dirt ground is the one that exists.
+**A low-poly kit usually has no textures at all — it has a palette.** The
+dungeon's 211 models share one material over a 1024² image that is not a
+picture of anything: an 8×4 grid of flat colour cells, one per surface the
+artist meant. Every face's UV lands in exactly one cell, so **the cell is the
+material identity the kit was authored with**, and it is the only thing in the
+file that distinguishes a wall from a barrel hoop.
 
-```
-Dirt Ground node group      tuned in Blender, sliders for every layer,
-      |                     driven by world position — no tiling, no seams
-      |   scripts/export-level.sh ─┐    (bakes, then exports: ~0.8s + ~1.7s)
-      v                            |
-levels/dungeon/textures/dirt_ground.png    |    committed, rebuilt by every export
-      |                            |
-      v                            v
-public/maps/dungeon.glb                 one joined floor, world-projected UVs
-```
+That makes a retexture a per-face reassignment rather than a per-object one,
+because a single wall mesh carries three of them at once. It is what
+`scripts/retexture-dungeon.py` does, and the two things it got wrong first are
+the two worth knowing:
 
-**The export bakes.** `export-level.py` calls `bake-material.py`'s `main()` for
-every material carrying a `tile_period`, in the same `--background` process that
-is already holding the .blend open, so a slider you moved is in the map you
-built. It costs about **1 s** of a 2.5 s export — measured, after an earlier
-claim that a bake would be "slow and unpredictable" turned out to be worth
-nothing. Run `scripts/bake-material.py` by hand only when you want the PNG
-refreshed without exporting.
+- **A swatch is a colour, not a surface, so a cell can need more than one
+  material.** Cell (1,3) light grey is the wall field *and* every metal fitting
+  in the kit — barrel and box linings, chest and trunk bands, sword blades,
+  keys, torch heads, shield framing, banner poles; (5,3) pale stone is the floor
+  tiles *and* the crockery; (0,2) white is the spike trap *and* the banner
+  patterns. Classifying on the cell alone put masonry on 25 barrels and gravel
+  on the dinner plates. So a cell holds an **ordered list** of rules — first
+  mesh-name prefix that matches wins — and that same mechanism is what puts one
+  8×8 m piece at the origin on its own tile texture while every other floor
+  stays gravel, with no per-object override and no mesh copy. The wood cell
+  needed no rule at all, which is the tell that it was the one swatch the kit
+  used for a single material.
+- **Reading a cell is destructive.** The classification is read from the atlas
+  UVs, and the retexture then *overwrites* those UVs with its projection — so a
+  second run has nothing left to read. Keying the re-run off the material
+  already on the face is what makes the script idempotent, and the only way to
+  undo a bad pass is to pull the UVs back out of a copy of the .blend
+  (`bpy.data.libraries.load`), which is worth taking before you start.
 
-**`world_uv_join` on the material asks for the export-time join.** The dirt
-needs it: its tiles are *rotated* 90° to break up the kit's repeating pebble
-bumps, and a seamless tile only stays seamless when it repeats by translation,
-so the floor is joined into one object and projected in world space. The join is
-undone the moment the export finishes. **The projection offsets by `+ 0.5`**,
-because the bake plane is centred on the origin and spans −period/2..+period/2 —
-without it the map is half a tile out of phase with the viewport you tuned in.
+**The new UVs are a local-space box projection, and the repeat has to divide the
+grid.** Every in-map wall sits on a 2 m grid at scale 1.0; every floor is on a
+4 m one. A projection in *local* space at a repeat that divides that grid — 2 m
+for walls, 4 m for floors, 0.35 m for the small fittings that sit on no grid at
+all — therefore tiles across the map by pure **translation**, which is the only
+motion a seamless texture survives (trap 18), while leaving every instance
+sharing its mesh so nothing is paid in draw calls. World-space UVs would be
+seamless too and would cost one unique mesh per object; the only way to have
+both is to join the pieces at export, which is what the retired procedural floor
+used to do.
 
-A material *without* the flag keeps whatever UVs its mesh already has, which is
-how a procedural could be mapped in object space and stay instanced. Nothing
-uses that today.
+**What "local space" costs, and it is not nothing: a rotated piece takes its
+pattern with it.** The kit's 140 ground tiles are rotated in 90-degree steps on
+purpose, so their moulded relief does not repeat every 4 m — and a local
+projection rotates the gravel along with the tile, so each one met its
+neighbour's edge with the wrong one. That is trap 18 again, from the other
+direction, and on a stochastic gravel it is subtle enough to pass a screenshot:
+it shipped once and was found by arithmetic, not by looking.
 
-**The tiling check is a periodicity test, not an edge comparison.** The obvious
-check — first row of pixels against the last — cries wolf on anything with hard
-edges: masonry puts a mortar joint exactly on the tile boundary, so those two
-pixels sit in different courses *by design* and differ wildly while the tile
-repeats perfectly. `bake-material.py` bakes two periods into a 256² probe and
-compares the halves instead, judged against the pattern's own contrast, since
-Cycles jitters its samples and the floor is never exactly zero.
+The fix is not to stop rotating them. It is to **counter-rotate the UVs**, which
+cannot be done on a mesh that two rotations share — so each rotation gets its
+own copy of the mesh, and only for pieces laid edge to edge on the grid. Four
+copies, four extra primitives. A wall needs none: its faces are vertical, where
+a yaw slides the pattern along the run instead of spinning it. Nor does a table
+or a banner, which has no neighbour to line up with — a first cut gated on
+"mostly horizontal faces" and split 33 meshes for nothing.
 
-**Why it is built this way.** The kit's dirt tile is one small patch of the
-shared atlas repeated under all 110 floor tiles, so the ground read as flat and
-a chameleon lying on it was a silhouette. The replacement puts its contrast at
-**1-2 m** — the scale a body covers and a brush can match in two or three
-strokes — because camouflage here is painted by hand: detail finer than a stroke
-cannot be reproduced, and a smooth painted body on a speckled ground stands out
-*more*.
+**The check that finds this is arithmetic, not a screenshot.** For every
+up-facing loop, `uv` must equal `(world − the object's own origin) / repeat`;
+and every piece's origin must sit on the same phase modulo the repeat, or two
+neighbours are half a tile out however well each is projected. Both are three
+lines in the Blender console and neither can be eyeballed. The phase half found
+two tiles nudged off the grid by 31 cm and 1 cm — each leaving a gap on one side
+and an overlap on the other — which no amount of looking at the texture would
+have explained.
 
-**Three rules hold it together:**
+**Splitting one material into eight costs primitives, not meshes.** The dungeon
+went from 172 primitives to 279 — a mesh with faces in three materials draws
+three times, and four more come from the rotation copies above. That is the
+price of the split, and it is the number to watch against §7 before adding a
+ninth material.
 
-1. **The tiles are rotated in 90-degree steps** (hashed from each tile's own
-   position, so it never reshuffles) to break up the kit's repeating pebble
-   bumps, which marched in step every 4 m.
-2. **The node group is periodic by construction** — every noise is sampled on a
-   torus, so `Tile Period` metres of it wrap exactly. That is what makes one
-   baked square tile with no seam.
-3. **The export joins the floor into one object and projects UVs in world
-   space.** Both halves matter: a seamless tile only stays seamless when it
-   repeats by *translation*, and per-tile UVs plus per-tile rotation means a
-   rotated tile meets its neighbour's edge with the wrong one. That shipped
-   once, and the seams were visible from across the room.
+**A texture with no contrast in it will not read however it is mapped.** The
+kit's fittings went to a brushed metal whose standard deviation was **6** of 255
+— against brick's 16 — and at a 1 m repeat a barrel hoop came out a flat white
+patch that looked like unpainted plastic, which is what "the keys are not metal"
+turned out to mean. Neither the material nor the mapping was wrong. Measure it
+(`magick x.jpg -format "%[fx:standard_deviation]" info:`) before re-deriving
+anything: the fix was a sigmoidal stretch to 13 and a repeat of 0.35 m, so the
+brushing is visible at the scale the props actually are.
 
-The join is undone the moment the export finishes, so the `.blend` keeps its
-individual tiles. The per-tile UVs they still carry are vestigial — the export
-overwrites them — and the *tuning* material ignores UVs entirely.
+**Which maps to ship: colour and normal for a surface, and stop there.**
+Roughness is the one to think about rather than the one to include — the dungeon
+is not `matte`, so a roughness map survives to the GPU and puts back exactly the
+view-dependent sheen that `matte` exists to remove on the hospital, and a
+surface whose brightness moves with the hunter has no one colour for a chameleon
+to match. A flat roughness factor instead, for everything a body can lie
+against.
 
-**Two Blender traps worth knowing before you build a lattice in nodes.** A Math
-node's sockets default to **0.5**, not 0 — so `WRAP(value, max)` with the Min
-left alone wraps into `[0.5, max)` and quietly breaks periodicity. And `MODULO`
-is signed, so a row at −1 offsets the wrong way and a running bond breaks either
-side of an object's origin; `WRAP` is what you want.
+**The metal is the deliberate exception, and it costs three things.** A barrel
+hoop is not somewhere anybody hides, so it can have the sheen: it carries the
+pack's roughness map and `metallic 0.35`. Each of those needed a decision.
+**Metallic cannot go near 1**, because the dungeon has no environment map at all
+— `scene.environment` is never set, and `makeMatte` only nulls what a matte map
+carries — so a metal has nothing to reflect, loses its diffuse in proportion to
+its metalness, and goes black between the lamps; 0.35 keeps the albedo and buys
+a highlight. **The pack's Metalness map is worth nothing** and is not shipped:
+mean 254 of 255, standard deviation 2 — it says "all of this is metal", which a
+factor says for free. And **glTF packs metallic and roughness into one image
+that Blender writes as PNG whatever it is fed**, so the source resolution is the
+only lever on its size: 512² came out 200 KB, and 256² — plenty for something
+this low-frequency — came out 52 KB. Ambient occlusion doubles up on real-time lighting and
+wants a second UV channel; displacement has nothing to tessellate; metalness on
+wood is a constant near zero. Fifteen images came to 1.35 MB in the file and
+took the map from 4.18 MB to 4.46 MB. **It gzips much worse, though: 1.57 MB to
+2.34 MB.** A JPEG has no slack
+left in it, and the flat swatch atlas it partly replaced was nothing but slack.
+`.glb` size on disk and `.glb` size over the wire move independently the moment
+photographic textures are involved, and §7's rule — serve `public/` compressed
+before anything else — is the one that cares.
 
-Move a slider, save, export. **The stale-bake trap is gone by construction**,
-since the export bakes — but the check that caught it survives for the
-export-by-hand path: the bake writes `dirt_ground.bake.json` beside the PNG, and
-the export refuses to write a file whose sliders have moved since, naming the
-ones that did. The stamp is on disk rather than on the material because
-**writing a custom property does not mark a .blend dirty** — Blender never
-offers to save it, so a stamp kept there quietly never arrives, which is how the
-check failed the first time it was needed. Beside the PNG it is also committed,
-so a fresh checkout is verified too, and it diffs.
+**Two materials can share one texture; a tint has to be its own image.** The
+dungeon's dark iron is the same brushed metal as its silver, and the obvious way
+to say so is a Multiply node between the texture and Base Color, which glTF
+carries as `baseColorFactor` for free. **The Blender exporter does not write
+it** — the material came out with `factor=[1,1,1,1]`, which is to say identical
+to the silver, and the grates would have shipped the wrong colour with nothing
+warning. Nothing in Blender shows this; only reading the `.glb` back does. The
+fix is a second 23 KB image with the tint baked in. Read every new material out
+of the exported file before believing it, the way §6 says to read the collision.
 
-Note what the export writes: `levels/dungeon/textures/dirt_ground.png` is a build
-artefact of the node graph, so an export leaves it modified in the working tree
-whenever the sliders have moved. That is the point — it keeps the committed PNG
-and the .blend telling the same story.
+**Brightness belongs in the textures, not the exposure, when it is the surfaces
+that are dark.** Every colour map here is written out at `-gamma 1.4` from its
+original — one number, applied once, in `textures/TEXTURES-LICENSE.txt` beside
+the commands that made them. `exposure` in `shared/maps.ts` is the other lever
+and a worse one for this: it lifts the lamps and the tone curve with the walls,
+so a map whose *albedo* is too dark comes out washed rather than lit. Normals
+are never gamma-touched — they are a direction, not a colour, and are tagged
+Non-Color for the same reason.
+
+**A normal map is a camouflage decision as much as a look.** It does not touch
+albedo, so what a chameleon paints still matches — but it adds shading detail at
+the mortar-joint scale, finer than a brush stroke can reproduce, and the same
+argument that shaped the retired dirt ground applies: a smooth painted body
+against a surface with structure it cannot copy stands out *more*. `Strength` on
+the Normal Map node is the dial, and the wood is already at 0.8 for it.
 
 ### The asset palette
 
@@ -318,6 +367,41 @@ origin   = wallface + ymax * n            # ymax = max local y
 The `ymax` term is what makes the piece sit *on* the wall rather than floating or
 sinking into it, and it works for both a banner that hangs entirely in front of
 the wall and a bracket that pokes slightly through it.
+
+### A kit's drawn thickness is not its collider, and the gap is a hiding place
+
+**Check the two profiles against each other before trusting a wall.** The
+dungeon kit's wall is 1.0 m thick at its base and cornice and 0.48 m through the
+middle; its collider is a 0.5 m slab. Subtract them and every wall in the map
+has a 4 m wide, 2.7 m tall, **0.26 m deep alcove** on both faces, roofed by the
+cornice — and a chameleon's torso is 0.17 m deep, so a player standing in one
+was not hiding *against* the wall, they were standing inside it and out of
+sight. It survived every sightline and walkability check in §6, because nothing
+was unsealed and nowhere was unreachable.
+
+**Widening the collider is the wrong fix**, and worth understanding why. It
+would stop a body 0.26 m short of the surface it is painted to match, and
+`players/body.ts` sizes the collider *smaller* than the figure precisely so a
+back can meet a wall instead of hovering off it. The geometry is what moves:
+`scripts/inset-wall-bands.py` brings the bands to 0.35, two centimetres proud of
+the blocks standing out of the field.
+
+Three things make that safe to do in bulk, and each is worth copying:
+
+- **Compress the coordinate, not a band of height.** The rule is "anything
+  0.36–0.55 from the centre plane comes in", applied to **x and y alike** —
+  which is what carries an L-shaped corner piece, thick on both axes, that a
+  rule written for "the y thickness" would bend on one leg and leave standing on
+  the other.
+- **A range leaves decoration alone.** `wall_pillar` reaches 0.75, `wall_shelves`
+  0.87, `wall_cracked` 0.63; all are past the range and none of them move.
+  The wall's *length* is untouched too, so ends still meet exactly.
+- **Make it idempotent by construction.** The range starts above every value the
+  transform can produce, so a second run is a no-op — no flag and no custom
+  property, which trap 20 says would not have survived anyway.
+
+**Moving vertices invalidates any projected UV**, so a re-texture pass has to
+follow — see the projection in §1.
 
 ### Keeping the map walkable
 
@@ -600,13 +684,22 @@ a real level, which is real but not a rescue.
 15. Floor filed outside the collection the floor plan is derived from.
 16. A bbox-based walkability check reporting a false blockage at an open piece.
 17. Colliders left in a solid display mode, hiding the map in the viewport.
-18. A seamless texture given per-tile UVs on tiles that are rotated — seamless
-    only survives repetition by translation.
-19. Moving a `Dirt Ground` slider and shipping the previous bake. **The export
-    now bakes**, so this cannot happen through the script; exporting by hand
-    still can, and the stamp beside the PNG is what refuses it.
+18. A seamless texture given UVs that repeat by anything but translation. Three
+    ways in, and all of them are found by arithmetic rather than by looking: a
+    **rotated** piece under a local projection carries its pattern round with
+    it; a repeat that does not **divide** the placement grid is part of a tile
+    out at every join; and one piece **nudged** off the grid puts every join
+    along it out of phase.
+19. Retexturing an atlas kit on the swatch alone, when the kit reused that
+    swatch for a second surface — masonry on the barrel hoops.
 20. Keeping any bookkeeping in a custom property and expecting it to persist: a
     property write leaves the .blend *clean*, so nothing prompts you to save it.
+21. `hide_viewport` mistaken for `hide_render`: colliders hidden in the viewport
+    are still in an F12 render, and a preview then shows white slabs where the
+    map should be. Trap 17's cousin, and it looks like a broken export.
+22. A kit piece drawn thicker than its collider, leaving a pocket outside the
+    collider and inside the silhouette. Every §6 check passes; you find it by
+    subtracting the two profiles, or by a player standing in one.
 
 ---
 
@@ -650,5 +743,24 @@ Exposure and preview against that instead.
   other side.
 - **Bounce light**, if you leave GI on. This is the big one.
 - **Shadow softness.** `shadow_soft_size` has no glTF field, so every lamp is an
-  ideal point in game however soft it looks here.
+  ideal point in game however soft it looks here. Softness comes from the map
+  row instead — `shadow.radius` in `maps.ts`.
+
+**A lamp casts only if its name starts with `shadow_`.** Nothing else opts it
+in: glTF carries no per-light shadow flag, so the name is the switch, and a
+level where no lamp is renamed pays nothing at all. **Rename the object** — the
+one in the outliner — and not the light data-block; either works, but only the
+object's name is the one you can see. (They arrive as two different names on the
+other side: the node takes the object's, the light inside it takes the
+data-block's, and `castsShadow` in `world/levelScene.ts` accepts either. It used
+to accept only the light's, which meant renaming the obvious thing did nothing
+at all and said so nowhere.) **Rename spot lights.** A
+spot's shadow is one frustum over one room's cone; a point's is a *cube* — six
+renders of everything that casts, over a whole sphere that culling barely
+narrows. Six against one, for a ceiling fixture that is physically a spot
+anyway.
+
+The hospital is wired for this already: shadows are enabled in its map row with
+walls, floors and ceilings excluded from casting (they still receive), so
+renaming one lamp in Blender is the whole change.
 

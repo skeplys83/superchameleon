@@ -43,7 +43,7 @@ export_one() {
   id=$1
   # One folder per level: levels/<id>/<id>.blend, with whatever it references
   # beside it. That is what keeps image paths relative, so a level opens on any
-  # checkout, and it is where bake-material.py writes too.
+  # checkout.
   blend="$levels/$id/$id.blend"
   glb="$repo/public/maps/$id.glb"
 

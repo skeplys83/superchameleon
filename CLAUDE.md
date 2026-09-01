@@ -200,12 +200,15 @@ commit`.
 | command             | what it proves                                                                                                                                          |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm run typecheck` | both projects compile, and neither half used the other's globals                                                                                        |
-| `npm test`          | the server suite in `src/server/test/`: 95 tests over the rooms, the draw, the clock, the lobby's chat, what the wire is allowed to say, and the filter |
+| `npm test`          | 112 tests: the server suite in `src/server/test/` over the rooms, the draw, the clock, the lobby's chat, what the wire is allowed to say, and the filter — plus the two headless client suites in `src/client/players/test/`, the room bounds and the follow camera |
 | `npm run lint`      | the import boundaries, and the React rules                                                                                                              |
 | `npm run build`     | the client bundles                                                                                                                                      |
 
-The **client has no automated tests** — it is three.js in a frame loop — so a
-change there is checked by running it. See [docs/VERIFYING.md](docs/VERIFYING.md).
+The client is **mostly** untested — it is three.js in a frame loop — so a change
+there is checked by running it. The exception is geometry that can be called
+without a frame or a canvas, which is worth a test precisely because nobody can
+see a camera clamp go wrong until it does. See
+[docs/VERIFYING.md](docs/VERIFYING.md).
 
 ## Stack
 
@@ -234,7 +237,7 @@ line.
 ```
 index.html          the page shell: title, viewport, favicon link, #root
 dist/               `vite build` output. Generated, gitignored, never edited
-public/sounds/      the nine .mp3 files
+public/sounds/      the ten .mp3 files
 public/maps/        one .glb per map — the only map asset the game loads
 public/models/      player.glb — the one rigged body everyone wears
 characters/         figure-poses.blend: the rigged body, and the eight sculpted
@@ -253,11 +256,14 @@ export, and the row in `shared/maps.ts` is a display name plus the few numbers
 the game needs before the file has loaded. There is no build step between the
 .blend and the .glb.
 
-**The dungeon's ground is generated, though.** `levels/dungeon/textures/` holds a PNG per
-procedural material — one today, the dirt ground — baked out of a Blender node
-group by the export, with a `.bake.json` beside it recording the sliders it came
-from. They are committed, because glTF cannot carry a node
-graph and the game can only load an image. See [levels/AUTHORING.md](levels/AUTHORING.md).
+**A map's textures live beside its `.blend`, though.**
+`levels/<id>/textures/` holds what the materials point at, committed and
+referenced by a relative path. The dungeon's are the seven photographic surfaces
+— brick, rock, wood, gravel, tiles, metal and a dark iron — that its kit does
+not ship:
+the kit's own texture is a grid of flat colour swatches, so the retexture is a
+per-face reassignment by swatch, done once by `scripts/retexture-dungeon.py`.
+See [levels/AUTHORING.md](levels/AUTHORING.md).
 
 **Hosted deployments run on a single exposed port.** In production Colyseus
 attaches directly to the HTTP server on `PORT` (default 3000) unless `GAME_PORT`
@@ -279,7 +285,8 @@ nothing keeps an old image. See [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 **No score across rounds** — a round has a winner and then the lobby forgets it.
 No ready-up: a lobby is a place to wait, not a checklist. No health — a catch is
 instant. No spectating, because being caught keeps you playing instead. One spawn
-point per map. Paint has no undo and no per-part erase. **No client tests**, and
+point per map. Paint has no undo and no per-part erase. **Almost no client
+tests** — two headless geometry suites and nothing else — and
 no test for the round trip home or for reconnection into a held seat. Each
 folder's doc ends with the gaps specific to it.
 

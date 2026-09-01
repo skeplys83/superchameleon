@@ -12,15 +12,16 @@ import { ROOM_SURFACE } from "@/client/world/surface";
  * applied a second time: pick a floor at 40% brightness, paint it on, and the
  * body renders at 16%. That is the "I picked the ground and it came out way
  * darker" — the darker the map, the worse it got, which is why the dungeon
- * showed it and the arena barely did.
+ * showed it and the old white arena barely did.
  *
  * Albedo against albedo is also simply what camouflage means. Two surfaces with
  * the same base colour under the same light render the same colour, which is
  * the whole trick a chameleon is trying to pull.
  *
- * Both maps make this exact rather than approximate: the arena's twelve
- * materials are untextured (named for their own hex), and the dungeon is a
- * single 1024² atlas with a white base factor. Neither has vertex colours.
+ * Every map makes this exact rather than approximate: each is a swatch atlas
+ * or photographic material with a white base factor, and none carries vertex
+ * colours. The two metals in the dungeon are the one place a picked colour
+ * flatters — see `paint/CLAUDE.md`.
  */
 
 const ray = new THREE.Raycaster();

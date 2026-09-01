@@ -167,7 +167,7 @@ export function Game() {
       setDropped(false);
       // Connecting is the other thing worth waiting on, and until now it showed
       // nothing: `joined` flips instantly, `room` arrives a few hundred ms later,
-      // and in between the menu is gone and the world is an empty arena nobody
+      // and in between the menu is gone and the world is an empty lobby nobody
       // is in yet. It ends on the room *or* on the error — never left hanging.
       const arrived = beginLoading();
       go()
@@ -484,7 +484,7 @@ export function Game() {
               <div className="text-sm font-semibold tracking-wide text-rose-200">
                 Caught by {caughtBy}
               </div>
-              <div className="mt-0.5 text-[11px] text-rose-300/80">
+              <div className="mt-0.5 text-[0.6875rem] text-rose-300/80">
                 You are a hunter now — go and find the rest.
               </div>
             </div>
@@ -509,7 +509,8 @@ export function Game() {
       {/* Last, and over everything including the menu, because it is the one
           overlay that is not about the game: while it is up there is no floor
           under the player and nothing behind it worth seeing. It cannot appear
-          on the start menu — the arena downloads nothing and never suspends. */}
+          on the start menu, which draws no map at all. **The lobby does suspend now**:
+          it was 0.6 MB of primitives and is 1.2 MB of stone and textures. */}
       {/* Developer mode only, and compiled out of the build — see
           `app/dev.ts`. Over the panels, because it is scaffolding rather
           than part of the game, and pinned to the one corner nothing else uses.

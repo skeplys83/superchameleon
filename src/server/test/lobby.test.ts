@@ -26,7 +26,7 @@ const joinLobby = (code: string, name: string) =>
   connected(colyseus.sdk.joinById(code, { name, pid: `${name}-tab` }));
 
 describe("a lobby", () => {
-  it("waits in the arena under a readable four-letter code", async () => {
+  it("waits in the lobby map under a readable four-letter code", async () => {
     const client = await openLobby();
 
     expect(client.roomId).toMatch(/^[A-HJ-NP-Z2-9]{4}$/);
@@ -57,7 +57,7 @@ describe("a lobby", () => {
     expect(host.state.graves.length).toBe(0);
   });
 
-  it("refuses the arena as a match map, at creation and from the host", async () => {
+  it("refuses the lobby map as a match map, at creation and from the host", async () => {
     const host = await openLobby({ map: LOBBY_MAP });
     expect(host.state.nextMap).toBe(DEFAULT_MATCH_MAP);
 
@@ -82,7 +82,7 @@ describe("a lobby", () => {
     const host = await openLobby({ map: "dungeon" });
     const guest = await joinLobby(host.roomId, "guest");
 
-    guest.send("setMap", { map: "arena" });
+    guest.send("setMap", { map: "lobby" });
     guest.send("start", {});
     await settle();
 
@@ -151,7 +151,7 @@ describe("a lobby", () => {
     expect([...drawn].sort()).toEqual(["guest", "host"]);
   });
 
-  it("sends only the chameleons, and keeps the hunter waiting in the arena", async () => {
+  it("sends only the chameleons, and keeps the hunter waiting in the lobby map", async () => {
     const host = await openLobby({ maxPlayers: 4 });
     const guest = await joinLobby(host.roomId, "guest");
 

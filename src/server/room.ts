@@ -120,7 +120,7 @@ export class GameRoom extends Room<GameState> {
     this.maxClients = cap || MAX_PLAYERS;
     this.state.maxPlayers = this.maxClients;
 
-    // The arena is where lobbies wait, never a map a match runs on, so it is
+    // The lobby map is where lobbies wait, never a map a match runs on, so it is
     // refused here as well as absent from the picker.
     const wanted =
       typeof options?.map === "string" && MATCH_MAP_IDS.includes(options.map as never)
@@ -130,7 +130,7 @@ export class GameRoom extends Room<GameState> {
     if (this.isLobby) {
       this.state.mode = "lobby";
       this.state.phase = "waiting";
-      // The waiting room is always the arena. It is somewhere to *be* while
+      // The waiting room is always the lobby map. It is somewhere to *be* while
       // people arrive, and the map you are about to play should still be a
       // surprise when you get there.
       this.state.map = LOBBY_MAP;
@@ -358,7 +358,7 @@ export class GameRoom extends Room<GameState> {
    * `matchMaker.remoteRoomCall` reaches it by name.
    *
    * The news has to arrive here rather than being shown in the match, because
-   * the hunter never went to the match — they are standing in this arena
+   * the hunter never went to the match — they are standing in this lobby
    * watching a countdown that is now counting towards nothing.
    */
   async roundAborted(id: string) {

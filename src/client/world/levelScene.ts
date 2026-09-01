@@ -79,12 +79,31 @@ const PREFIXES: [string, ColliderKind][] = [
  * its `col*_` prefix.
  *
  * **Only these stop the follow camera.** Everything else a map is furnished
- * with — barrels, tables, crates, the arena's cover — is passed straight
+ * with — barrels, tables, crates, the lobby's boulders — is passed straight
  * through, because a camera that backs away from every barrel spends a hunt
  * lurching in and out. `world/CLAUDE.md` has the rule and the one judgement
  * call in it.
  */
 const SHELL = /floor|wall|ceiling/i;
+
+/**
+ * Whether a lamp has opted into casting, by name.
+ *
+ * **Both the light's name and its parent's, because only one of them is the one
+ * you renamed.** three's `GLTFLoader` names a light object after the glTF *light
+ * definition*, which Blender fills from the light's **data-block**, and hangs it
+ * as a child of the node — and the node is what carries the **object** name. So
+ * renaming a lamp in the outliner, which is the obvious thing to do and what
+ * `levels/AUTHORING.md` asks for, produces a node called `shadow_waiting_-3_15`
+ * with a light inside it still called `light_waiting.001`.
+ *
+ * Testing the light alone therefore never fired, silently, for every lamp
+ * anybody renamed — no error, no warning, just a map with no shadows in it and
+ * nothing to suggest why. Either name counts now.
+ */
+const CASTS = /^shadow_/;
+export const castsShadow = (light: THREE.Object3D) =>
+  CASTS.test(light.name) || CASTS.test(light.parent?.name ?? "");
 
 /** Whether a collision object is part of the shell rather than the furniture. */
 export const isShellName = (name: string) => SHELL.test(name);
@@ -98,6 +117,11 @@ export function colliderKindOf(name: string): ColliderKind | null {
 export type PreparedLevel = {
   scene: THREE.Object3D;
   colliders: LevelCollider[];
+  /**
+   * Every lamp in the level, for `ShadowBudget` to move casting between.
+   * Collected here because this is the one traverse of the file.
+   */
+  lamps: THREE.Light[];
   /** Reported by `checkLevel` in development. Nothing decides anything on it. */
   stats: {
     drawn: number;
@@ -252,7 +276,7 @@ function batch(scene: THREE.Object3D, drawn: THREE.Mesh[]) {
  * `attributes.position.array`.** That shortcut is only correct while the
  * attribute is tightly packed: an `InterleavedBufferAttribute` shares its buffer
  * with the normals and UVs, so `.array` is *everything*, and rapier reads
- * normals as if they were positions. It cost the arena every one of its hull and
+ * normals as if they were positions. It cost the old arena every one of its hull and
  * trimesh colliders — a capsule's 1056 vertices arrived as 2112, the ring's 3072
  * as 8192 — and a player embedded in the resulting garbage cannot move at all.
  * Interleaving is a packing choice a glTF is free to make, so the loader must
@@ -279,7 +303,7 @@ function colliderFrom(mesh: THREE.Mesh, kind: ColliderKind): LevelCollider | nul
 
   // Decomposed rather than read off the matrix: `setFromRotationMatrix` assumes
   // the upper 3x3 is a pure rotation, and a non-uniformly scaled object's is
-  // not. The arena's ramp is scaled [4.5, 0.5, 9.5] and turned 18.3 degrees, and
+  // not. The old arena's ramp was scaled [4.5, 0.5, 9.5] and turned 18.3 degrees, and
   // that shortcut read it as **66.9** — a slab standing on end where a gentle
   // ramp is drawn, which is an invisible wall you cannot see in Blender because
   // Blender is not doing the reading. Only rotated *and* scaled pieces show it.
@@ -342,6 +366,7 @@ export function prepareLevel(
   /** Materials are shared across meshes; each is only worth flattening once. */
   const matted = new Set<string>();
   const sunShadows: THREE.DirectionalLight[] = [];
+  const lamps: THREE.Light[] = [];
   let lights = 0;
   let shadowCasters = 0;
 
@@ -349,6 +374,9 @@ export function prepareLevel(
     const light = child as THREE.Light;
     if (light.isLight) {
       lights += 1;
+      // A sun is not a lamp: it lights the whole level from one direction and
+      // there is nothing to be nearest to.
+      if (!(light as THREE.DirectionalLight).isDirectionalLight) lamps.push(light);
       // glTF carries photometric units — lux for a sun, candela for a lamp —
       // so a Blender lamp arrives in the thousands and washes the map out.
       light.intensity *= LIGHT_SCALE * lightScale;
@@ -360,33 +388,58 @@ export function prepareLevel(
         if (tuning.distance !== undefined) falloff.distance = tuning.distance;
       }
 
-      if (light.name.startsWith("shadow_")) {
-        shadowCasters += 1;
-        light.castShadow = true;
-        const shadow = (light as THREE.DirectionalLight).shadow;
-        if (shadow) {
-          // A sun covers the whole level from one map and needs the resolution;
-          // a point light's shadow is a *cube*, so three packs six faces into
-          // one texture and 2048 would mean 8192x4096. Only the sun is raised.
-          const size =
-            shadowTuning.mapSize ??
-            ((light as THREE.DirectionalLight).isDirectionalLight ? 2048 : 1024);
-          shadow.mapSize.set(size, size);
-          shadow.bias = shadowTuning.bias ?? -0.0005;
-          if (shadowTuning.intensity !== undefined) shadow.intensity = shadowTuning.intensity;
-          if (shadowTuning.radius !== undefined) shadow.radius = shadowTuning.radius;
-          if (shadowTuning.blurSamples !== undefined) {
-            shadow.blurSamples = shadowTuning.blurSamples;
-          }
+      // **Every lamp is set up to cast, whether or not it is casting now.**
+      // `ShadowBudget` moves the job between them as the camera moves, and a
+      // lamp promoted at runtime would otherwise carry three's raw defaults —
+      // a 512 map, no bias, and a point light's shadow camera reaching 500
+      // units for a light that stops at 26. That is a shadow nobody can see,
+      // appearing only in the rooms the budget happened to reach.
+      const shadow = (light as THREE.DirectionalLight).shadow;
+      if (shadow) {
+        // A sun covers the whole level from one map and needs the resolution;
+        // a point light's shadow is a *cube*, so three packs six faces into
+        // one texture and 2048 would mean 8192x4096. Only the sun is raised.
+        const size =
+          shadowTuning.mapSize ??
+          ((light as THREE.DirectionalLight).isDirectionalLight ? 2048 : 1024);
+        shadow.mapSize.set(size, size);
+        shadow.bias = shadowTuning.bias ?? -0.0005;
+        if (shadowTuning.intensity !== undefined) shadow.intensity = shadowTuning.intensity;
+        if (shadowTuning.radius !== undefined) shadow.radius = shadowTuning.radius;
+        if (shadowTuning.blurSamples !== undefined) {
+          shadow.blurSamples = shadowTuning.blurSamples;
+        }
+        if ((light as THREE.DirectionalLight).isDirectionalLight) {
           // A directional light's shadow camera is an orthographic box, and
-          // three's default is ±5 units — a tenth of the arena, so everything
+          // three's default is ±5 units — a tenth of a map, so everything
           // outside the middle simply stops casting. Sized to the level below,
           // once its extent is known.
-          if ((light as THREE.DirectionalLight).isDirectionalLight) {
-            sunShadows.push(light as THREE.DirectionalLight);
+          if (castsShadow(light)) sunShadows.push(light as THREE.DirectionalLight);
+        } else {
+          // **A lamp's shadow camera is fitted to how far the lamp reaches.**
+          // Point and spot shadows are perspective, and three's default far is
+          // 500 — twenty times the end of a hospital lamp, whose `distance` is
+          // 26. The depth written into the map is spread over that whole range,
+          // so almost all of the precision is spent on space no light arrives
+          // at, and `bias` — a fraction of the range, tuned against a sun's
+          // fitted camera — comes out a quarter of a metre adrift.
+          const cam = shadow.camera as THREE.Camera;
+          if ((cam as THREE.PerspectiveCamera).isPerspectiveCamera) {
+            const lens = cam as THREE.PerspectiveCamera;
+            lens.near = 0.2;
+            lens.far = falloff.distance || 30;
+            lens.updateProjectionMatrix();
           }
         }
       }
+
+      // Casting itself is still opt-in by name, for maps with no budget set —
+      // a budget takes it over from the first frame.
+      if (castsShadow(light)) {
+        shadowCasters += 1;
+        light.castShadow = true;
+      }
+
       return;
     }
 
@@ -403,7 +456,7 @@ export function prepareLevel(
     // test and the camera all read the collision layer instead. See invariant 5.
     //
     // A shell piece is excluded from *casting* by name. glTF has no per-object
-    // shadow flag, so this cannot come from the file, and the arena needs it:
+    // shadow flag, so this cannot come from the file, and a lit map needs it:
     // its walls are 12 tall under a 47-degree sun, which lays an 11-unit band of
     // shadow across a quarter of the floor and shuts the sun out of the room the
     // sky says it is shining into. They still *receive* — see invariant 18.
@@ -425,7 +478,7 @@ export function prepareLevel(
   // that covers it. Without this only the middle of a map casts at all.
   if (sunShadows.length) {
     // Measured over what actually *casts*, not over the colliders. Decoration
-    // can reach past every collider — the arena's cone and dome sit 36 units
+    // can reach past every collider — the old arena's cone and dome sat 36 units
     // out with nothing solid that far — and a shadow camera fitted to the
     // collision layer clips exactly those pieces.
     const bounds = new THREE.Box3();
@@ -458,7 +511,7 @@ export function prepareLevel(
       // across one shadow texel — texel / tan(elevation) — so it explodes as the
       // sun gets low. A constant `bias` cannot track that; `normalBias` offsets
       // along the surface normal in world units and does. Derived from the texel
-      // rather than typed, because the frustum above is derived too: the arena
+      // rather than typed, because the frustum above is derived too: a map
       // was striped end to end with a bias 230x smaller than its own error.
       const texel = (camera.right - camera.left) / sun.shadow.mapSize.x;
       sun.shadow.normalBias = shadowTuning.normalBias ?? texel * 3;
@@ -486,6 +539,7 @@ export function prepareLevel(
   return {
     scene,
     colliders,
+    lamps,
     stats: { drawn: drawn.length, instanced, batches, lights, shadowCasters },
   };
 }
@@ -496,7 +550,7 @@ export function prepareLevel(
  *
  * **Not `reachOf`**, which is the ground plane only. A sun looks at the level
  * from an angle, so its orthographic box lives in *light* space and has to
- * contain the level's whole 3D extent however the light is turned. The arena is
+ * contain the level's whole 3D extent however the light is turned. A level is
  * 20.5 out and 12 tall: a ground reach of 24.6 left the far corner 6.8 short,
  * and shadows simply stopped along a hard line across the floor.
  */
@@ -510,7 +564,7 @@ function radiusOf(collider: LevelCollider) {
 
   // The eight real corners, rotated. Adding the half-diagonal to the centre
   // distance is easier and always safe, but it over-reaches badly for a long
-  // thin piece — the arena's walls pushed the span from 32 to 44, and every
+  // thin piece — the old arena's walls pushed the span from 32 to 44, and every
   // wasted unit is shadow resolution spent on empty space.
   const [hx, hy, hz] = collider.half;
   let farthest = 0;
@@ -578,6 +632,38 @@ export function checkLevel(
     `${plural(colliders.length, "collider")}, ` +
     `${plural(stats.lights, "light")} (${stats.shadowCasters} casting shadows)`,
   );
+
+  // **The whole shadow chain, in one line.** Every part of it is silent when it
+  // fails: a lamp nobody renamed, a renderer whose `shadowMap` was switched on
+  // for a different map, a level whose furniture is excluded from casting. Each
+  // of those looks exactly like the others from the sofa — a room with no
+  // shadows in it — so all four are printed together and the broken link is
+  // whichever number is zero.
+  {
+    let casting = 0;
+    let receiving = 0;
+    const casters: string[] = [];
+    scene.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (mesh.isMesh || (mesh as unknown as THREE.InstancedMesh).isInstancedMesh) {
+        if (mesh.castShadow) casting += 1;
+        if (mesh.receiveShadow) receiving += 1;
+      }
+      const light = o as THREE.Light;
+      if (light.isLight && light.castShadow) {
+        const at = light.getWorldPosition(new THREE.Vector3());
+        casters.push(
+          `${light.parent?.name || light.name} (${light.type}, ` +
+          `${at.x.toFixed(1)}, ${at.y.toFixed(1)}, ${at.z.toFixed(1)})`,
+        );
+      }
+    });
+    console.info(
+      `level "${level.id}": shadows — ${casters.length} casting lights, ` +
+      `${casting} meshes cast, ${receiving} receive` +
+      (casters.length ? `\n  casters: ${casters.join("; ")}` : ""),
+    );
+  }
 
   // Every point light that casts is six render passes. Four is already a lot
   // for a browser; past that the frame cost stops being worth the darkness.

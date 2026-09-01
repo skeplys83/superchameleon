@@ -115,10 +115,21 @@ const FACE_DAMP = 7;
  *
  * **It is only the way *out* of a pose.** A body already standing — every
  * hunter, and a chameleon holding POSES[0] — walks on the frame the key goes
- * down, and stopping still drops back into the pose instantly. The delay is on
- * unfolding, which is the part that takes a moment in life too.
+ * down. The delay is on unfolding, which is the part that takes a moment in
+ * life too; there is nothing to delay on the way back, because there is no way
+ * back — walking keeps the standing pose it stood up into.
  */
 const RISE_DELAY = 0.5;
+/**
+ * How close the follow camera has to be pushed before the local figure is
+ * hidden. Comfortably outside a chameleon, whose standing half-height is 0.66,
+ * so it only ever engages once the room has squeezed the lens in against the
+ * body — see `CRAMPED_DISTANCE` in `camera.ts`.
+ *
+ * Local only: everybody else still sees the body, and nothing about it reaches
+ * the wire. It is a rendering decision about one player's own view.
+ */
+const FIGURE_HIDE_DISTANCE = 1.0;
 const TAU = Math.PI * 2;
 
 /** The shortest way round from `from` to `to`, in radians. Yaw is unbounded —
@@ -243,11 +254,16 @@ export function Player({
   const stepper = useRef(new Stepper(strideFor(role)));
 
   /**
-   * **A chameleon walks upright and drops back into their pose the moment they
-   * stop.** A body lying flat has no legs to walk on, and a pose is a thing you
-   * hold still in — so moving off overrides the choice rather than replacing
-   * it, and `pose` is still whatever they last pressed when they stand still
-   * again. A hunter never leaves POSES[0] anyway.
+   * **A chameleon walks upright, and walking spends the pose rather than
+   * borrowing it.** A body lying flat has no legs to walk on, so moving off
+   * unfolds them — and once they are up they stay up: stopping leaves the
+   * chameleon standing, and getting back into a pose is a thing you ask for.
+   * It used to snap back to whatever was last pressed the instant the keys
+   * were released, which meant a chameleon could never walk away from a hiding
+   * place without dropping into it again at the far end, and every adjustment
+   * of a hiding spot ended in the pose the player was trying to leave.
+   * `nowWalking` is what commits it, below. A hunter never leaves POSES[0]
+   * anyway.
    *
    * It is the same change pressing a number key makes, through the same code:
    * the box, the collider, the feet-stay-put shift and `net.pose` all follow
@@ -624,6 +640,13 @@ export function Player({
     m.unfolding = wantsWalk ? m.unfolding + delta : 0;
     const nowWalking = wantsWalk && (pose === 0 || m.unfolding >= RISE_DELAY);
     if (nowWalking !== walking) setWalking(nowWalking);
+    // **Standing up is a decision, so it sticks.** `activePose` already has the
+    // body upright for the walk; this is what makes the choice outlast the key,
+    // by writing the standing pose back into the one the player owns. Doing it
+    // here rather than off `walking` keeps it on the same frame as the unfold —
+    // and it costs no extra collider rebuild, because the box has already
+    // changed to POSES[0]'s on the frame `nowWalking` first went true.
+    if (nowWalking && pose !== 0) setPose(0);
 
     // **A walking chameleon faces where it is going, not where it is looking.**
     // Movement has always followed the camera rather than the figure, so a body
@@ -726,7 +749,21 @@ export function Player({
       euler.set(view.pitch, y, 0);
       state.camera.quaternion.setFromEuler(euler);
     } else {
-      followThirdPerson(state.camera, bodyPos, lookDir, view.zoom, shell.current, delta);
+      const seat = followThirdPerson(
+        state.camera,
+        bodyPos,
+        lookDir,
+        view.zoom,
+        shell.current,
+        delta,
+      );
+      // **A figure the lens is inside is not a figure, it is a wall of skin.**
+      // Looking up puts the camera under the body and a low ceiling gives it
+      // nowhere else to be, so the last few centimetres are bought by hiding
+      // what it is inside of. Never while painting: that is the one mode whose
+      // whole purpose is looking at your own body, and it holds the camera at
+      // `PAINT_ZOOM` anyway, well outside this.
+      if (visual.current) visual.current.visible = painting || seat > FIGURE_HIDE_DISTANCE;
     }
   });
 

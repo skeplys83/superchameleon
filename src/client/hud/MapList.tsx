@@ -5,7 +5,7 @@ import { LABEL } from "./ui";
 /**
  * The maps this build ships, shown rather than named.
  *
- * It lists what `playableMaps` allows, not `MAP_LIST`: the arena is the waiting
+ * It lists what `playableMaps` allows, not `MAP_LIST`: the lobby map is the waiting
  * room everybody starts in rather than somewhere you go, and a map still being
  * built is offered by dev builds only.
  *

@@ -29,6 +29,35 @@ const ARM_RADIUS = 0.075;
 const MUZZLE = new THREE.Vector3(0, 0, -0.9 * 1.1);
 
 /**
+ * How far down the crosshair the barrel is aimed, in the gun group's own units
+ * (so a little under that in metres once `BODY_SCALE.hunter` has shrunk it).
+ *
+ * **The barrel has to lie along the shot, not merely start on it.** The shot is
+ * cast from the camera through the centre of the screen and the tracer is drawn
+ * from the barrel *tip* to where it landed, so a gun with a rotation picked by
+ * eye leaves a beam that kinks the moment it leaves the muzzle — which is what
+ * the old inward `[0.03, -0.06, 0]` did: it converged about 2.7 m out and
+ * pointed visibly wide of anything further away.
+ *
+ * Aiming at a point on the shot line puts the whole barrel *on* that line, tip
+ * included, so the beam continues straight out of it. The convergence distance
+ * is the one place the two can only be exactly parallel; far enough out that
+ * the residual angle is nothing at any range you shoot at, near enough that the
+ * gun still reads as pointing where the crosshair is.
+ */
+const CONVERGE = 14;
+
+/**
+ * The barrel's rotation, derived rather than dialled in: the gun sits at `GUN`
+ * in the rig, which shares the camera's axes, so the crosshair is `-z` and the
+ * aim point is `(0, 0, -CONVERGE)`.
+ */
+const AIM = new THREE.Quaternion().setFromUnitVectors(
+  new THREE.Vector3(0, 0, -1),
+  new THREE.Vector3(0, 0, -CONVERGE).sub(GUN).normalize(),
+);
+
+/**
  * The gun's two idle motions. Both are deliberately tiny: this sits a few
  * centimetres from the eye, where a movement that would read as subtle on a
  * character in the world reads as the whole screen lurching.
@@ -217,8 +246,9 @@ export function Viewmodel() {
         {/* The arms are inside the rig with the gun: they hold it, so they carry
             the recoil and the walk with it. Moving the gun alone stretches them. */}
         <group ref={rig}>
-          {/* Angled slightly inward so the barrel converges on the crosshair. */}
-          <group position={GUN} rotation={[0.03, -0.06, 0]}>
+          {/* Aimed down the shot line, so the tracer leaves the barrel straight
+              rather than kinking at the muzzle. See `CONVERGE`. */}
+          <group position={GUN} quaternion={AIM}>
             <Shotgun scale={1.1} />
             <object3D ref={muzzle} position={MUZZLE} />
           </group>

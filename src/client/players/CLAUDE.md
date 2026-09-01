@@ -118,47 +118,108 @@ Four things do **not** follow from `BODY`, and three of them are deliberate:
 - **The name badge's gap** above a remote head is scaled in `RemotePlayers.tsx`,
   because it is a distance from a body rather than a distance in the room.
 
-## The follow camera skims the ground from under the lens, not along the ray
+## The follow camera solves for its distance, and never for its height
 
-The floor used to be taken off the *orbit ray*, which meant the lens was lifted
-as soon as that ray grazed the ground anywhere along its length — long before
-the lens was near it — so it jumped `CAMERA_SKIN` in a single frame. And the
-lift was `settled.y = floor`, which shortens the leg to the body and takes the
-lens off its own orbit, so further mouse movement moved nothing: the "stuck"
-camera. Now the probe is cast **straight down from where the lens actually is**,
-so the clamp engages continuously, and the lift is taken out of the *horizontal*
-leg, so the distance to the body is preserved and the camera slides around its
-sphere. Floor hits still never pull the camera *in* — that is what put the lens
-inside a lying player.
+**Every clamp comes out of the leg, along the line the pitch describes.** The
+lens sits at `aim + toCamera × distance`, and floor, roof and wall all answer
+the same question: how long may that leg be? Nothing writes a height into the
+seat, and nothing slides it around a sphere at a fixed distance.
 
-## The follow camera tests where the lens *ends up*, not where it was aimed
+That is not a tidiness rule, it is the fix for three bugs that were all one bug.
+Sliding along the sphere produces a point that depends only on the *horizontal*
+direction, so once the camera was on the floor, pitching further moved it
+nowhere — the view froze until enough mouse travel swung the free seat back
+above the ground. And because floor hits were skipped on the orbit ray while
+the under-lens probe could only find ground the lens was not yet inside, a look
+up from a full zoom put the seat metres below the map, where the final segment
+test slammed it to `CAMERA_MIN_DISTANCE` — the lurch, and then the stick, and
+the lens ending up **under the floor** at pitch 0.5. Solving for the distance
+instead makes the seat a continuous function of pitch: every fraction of a
+degree moves it, and it cannot be under a floor it is measured against.
+`test/camera.test.ts` holds all of that.
 
-Two passes, and the second one is not redundant. The first raycasts from the
-body outwards and either pulls the camera in (a wall) or **lifts it** (the
-ground — sliding along the floor rather than backing off it, or a lying
-player's aim point collapses the shot to the minimum distance). That lift is a
-sideways step out of the line just cleared, and in a room with a ceiling on it
-the step can finish on the far side of the roof. So a second ray tests the seat
-the lens actually took. That is the "camera sometimes clips through the
-ceiling" which survived every fix to the first pass.
+**A cap that cannot be met caps nothing.** Each one is `(room available) /
+sin(pitch)`, and the room available goes negative in ordinary play: a ceiling
+closer to the aim than its skin, or a chameleon lying flat, whose origin is
+nearer the floor than `FLOOR_SKIN` is deep. A negative cap fell through the
+clamp as "as close as you are allowed", so the lens jammed into the body — at 2°
+of up-look while lying down, which is most of the game. They return `Infinity`
+instead, and `AIM_STANDING` keeps the aim above the floor's skin the moment the
+view starts to rise, so the cap decays as `1/sin` from no cap at all rather than
+appearing out of nowhere already tiny. **And only what is below the aim is
+ground**: the under-lens probe looks down from above the lens, so in a low room
+it finds the *top* of the ceiling first, and treating that as floor lifted the
+lens through the roof for the segment test to slam back to the minimum.
+`test/camera.test.ts` holds all three.
+
+**The ground is still never backed away from at a level view.** A floor hit on
+the orbit ray is ignored exactly as it always was — a lying player's aim sits a
+hand's breadth above the ground, and pulling in on that collapses the shot the
+moment they lie down. What replaced the skim is a closed-form cap that only
+engages as the view tips up, in proportion to how far up it is looking, so a
+level camera keeps its whole zoom and glides.
+
+## The lens aims at the body's centre and stays in the room with it
+
+Two rules, and everything else in `camera.ts` serves them. **It aims at
+`bodyPos`** — nothing lifts or offsets the target, so the body is centred in
+every shot. **And it is never outside the room the player is in**, which is a
+containment guarantee rather than a preference: `test/camera.test.ts` sweeps
+every body height, zoom and pitch and asserts the lens is between the floor and
+the ceiling for all of them.
+
+**Containment beats the comfortable minimum.** `CAMERA_MIN_DISTANCE` and
+`CRAMPED_DISTANCE` say how close the lens may come; neither may push it through
+something. The segment test used to clamp *up* to `CRAMPED_DISTANCE`, and along
+a near-vertical leg a third of a metre is past a ceiling detected at a tenth —
+which is how a chameleon clinging to a ceiling ended up filming the building
+from the roof. Where the skin does not fit, half the distance to the surface
+does. A seat inside the body is always better than a seat outside the room.
+
+**Both corrections are made after the seat, not only before it.** A cap measured
+from the body cannot help when the body is *already* within a skin of the
+surface — clung to a ceiling, or lying on a floor — so the ground under the lens
+and the ceiling over it are each probed again once it has been placed, and each
+probe is anchored to the aim rather than to the lens. A lens that has sunk
+metres below the floor cannot find that floor from a ray starting above
+*itself*; the aim is always in the room, so a ray from there always finds the
+room's own surfaces.
+
+## Looking up costs zoom, and a body on the floor cannot look up at all
+
+To look up at 10° from seven metres back, the lens has to sit 1.2 m below the
+aim, and a standing chameleon's origin is only 0.66 above the floor. So the
+up-look buys its angle out of the distance: 7 m level, 2.1 at 10°, 0.7 at 30°,
+0.36 at the limit, with the lens riding at `FLOOR_SKIN` above the floor. At the
+end of that it is inside the figure, so `Player.tsx` hides it below
+`FIGURE_HIDE_DISTANCE`.
+
+**A body lying flat is the case with no answer.** Its origin sits *below*
+`FLOOR_SKIN`, so no distance along a rising line clears the floor — not even
+zero. The lens is pinned to the floor's skin instead and the view stays level
+however far the pitch is pushed. That is the price of aiming at the centre; the
+alternative is lifting the aim off the body, which frames the shot somewhere the
+player is not.
+
+## It tests where the lens *ends up*, not where it was aimed
+
+The last pass is a segment test from the aim to the seat, and it is not any of
+the caps restated: they decide how long the leg is, and none of them knows what
+the leg passes *through*. A seat at the right distance and the right height can
+still be on the far side of a wall it crossed on the way. It can only ever
+shorten the leg further.
 
 It raycasts `shell` only — floor, walls, ceiling — never the furniture. See
 `world/CLAUDE.md`.
 
 ## And it never rises above the roof over the player
 
-A third pass, and it is not the second one restated. The segment test can only
-refuse a seat that the **straight line from the body** actually reaches through
-something, and the hospital is roofed in patches — so a camera swinging up and
-back leaves a room through an open side and comes down on the roof next door
-with clear line of sight the whole way. Nothing was clipped; the shot was of a
-rooftop. So the roof is measured where it matters, straight up from the body,
-and becomes a ceiling for the lens too. No roof overhead, no cap.
-
-All three height clamps go through `seatAt`, which takes the lift or the drop
-out of the **horizontal** leg. Writing `settled.y` outright shortens the leg to
-the body and takes the lens off its orbit, which is the camera that further
-mouse movement could not budge.
+Measured straight up from the body rather than along the orbit, because the
+segment test can only refuse a seat the **straight line from the body** reaches
+through something — and the hospital is roofed in patches, so a camera swinging
+up and back leaves a room through an open side and comes down on the roof next
+door with clear line of sight the whole way. Nothing was clipped; the shot was
+of a rooftop. No roof overhead, no cap.
 
 ## Contracts
 
@@ -214,14 +275,26 @@ mouse movement could not budge.
   paint mode is standing in the open with their cursor free, and taking their
   feet away outright is the worse trade. Note that the walk keys also *leave*
   paint mode (`app/Game.tsx`), so in practice this is what Q and E feel like.
-- **Paint mode borrows the camera's zoom.** Entering pulls the lens in to
-  `PAINT_ZOOM` — the default 7 frames a body against the room, which is the shot
-  for hiding in it and the wrong one for painting a shoulder — and leaving hands
-  back whatever the player was looking at the room from, so the mode cannot
-  quietly redefine their camera for the rest of the round. **It only ever pulls
-  in**: somebody already closer than this chose that. `followThirdPerson` snaps
-  inwards and eases outwards, the same asymmetry the wheel has, so it reads as
-  stepping up to the body and strolling back off it.
+- **Paint mode borrows the camera's zoom, and eases into it.** Entering pulls
+  the lens in to `PAINT_ZOOM` — the default 7 frames a body against the room,
+  which is the shot for hiding in it and the wrong one for painting a shoulder —
+  and leaving hands back whatever the player was looking at the room from, so
+  the mode cannot quietly redefine their camera for the rest of the round. **It
+  only ever pulls in**: somebody already closer than this chose that.
+
+  **`zoom` and `zoomTarget` are two fields because the two writers want
+  different things.** The wheel sets both and lands on the frame it is turned: a
+  scroll is the player's own hand, and a lag between turning it and the camera
+  moving reads as the control being broken. Paint mode sets only the target, and
+  a rAF closes the gap over `ZOOM_TAU` — exponential, so it takes the same time
+  on a 144 Hz monitor as on a 60 Hz one. It used to assign `zoom` outright and
+  the camera arrived before the panel did, which read as the view glitching
+  rather than as stepping up to your own body.
+
+  **The ease lives in `usePointerControls`, not in the frame loop**, because
+  `Look` is written there and nowhere else — `react-hooks/immutability` fails the
+  build on a frame-loop write, which is the ownership line above being enforced
+  rather than described.
 - **A colour is recorded as *used* when a drag begins**, from the same branch
   that starts the stroke: `rememberColor` in `paint/palette.ts` feeds the
   panel's recent row.
@@ -310,9 +383,13 @@ mouse movement could not budge.
   normal, walking with nothing held keeps only gravity, and a release keeps
   everything, because that push *is* the movement. The walk bob reads the
   clamped numbers too, or the gun bobs while you stand still.
-- **A chameleon walks upright, and drops back into their pose the instant they
-  stop.** `pose` is what they *chose*; `activePose` is what the body holds, and
-  it is `POSES[0]` while they are moving on the ground unclung. Everything —
+- **A chameleon walks upright, and walking spends the pose.** `pose` is what
+  they *chose*; `activePose` is what the body holds, and it is `POSES[0]` while
+  they are moving on the ground unclung — **and the frame the walk begins
+  writes that back into `pose`**, so stopping leaves them standing. It used to
+  snap back the instant the keys were released, which meant a chameleon could
+  not walk away from a hiding place without dropping into it again at the far
+  end, and every attempt to adjust a spot finished in the pose being left. Everything —
   the box, the collider key, the feet-stay-put shift, `net.pose`, the figure —
   reads `activePose`, so this is the same change a number key makes, through
   the same code. Walking is *asking* to walk rather than travelling, or a body

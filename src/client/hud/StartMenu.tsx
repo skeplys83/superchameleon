@@ -83,7 +83,7 @@ export function StartMenu({
     };
   }, []);
 
-  /** The legal page replaces this menu, so the arena behind it is unchanged. */
+  /** The legal page replaces this menu, so the lobby behind it is unchanged. */
   const [legal, setLegal] = useState(false);
 
   const takeName = () => {
@@ -118,7 +118,7 @@ export function StartMenu({
             <div className="flex flex-col items-center gap-2">
               <h1 className="text-5xl font-extrabold tracking-tight">Super Chameleon</h1>
               <p className="max-w-md text-center text-sm font-medium text-neutral-400">
-                Everyone waits in the arena, armed. When the host starts, one player keeps the
+                Everyone waits in the lobby, armed. When the host starts, one player keeps the
                 shotgun — the rest become chameleons.
               </p>
             </div>

@@ -58,6 +58,13 @@ mechanism and the prose that explains it; the component is now composition.
 
 ## Contracts
 
+- **Entering a lobby now suspends, and it did not used to.** `LoadingScreen`
+  is over everything including the menu, and the one place it may not appear is
+  the start menu — which used to be free, because the lobby map was a box of
+  primitives that downloaded nothing. It is a stone cavern now: 0.39 MB, and a
+  real `Suspense`. The screen is still gated off the start menu because nothing
+  is drawn there at all, but the gap between clicking Play and standing in a
+  room is no longer zero, and anything that assumes it is will be wrong.
 - **Ads are GameDistribution's, and four of their rules are load-bearing**: the
   SDK loads once on mount and never from a button (or the first ad takes too
   long to arrive), while an ad *shows* only from a click and only outside

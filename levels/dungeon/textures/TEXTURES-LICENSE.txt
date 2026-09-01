@@ -1,0 +1,83 @@
+	Dungeon surface textures
+
+	Source: ambientCG (https://ambientcg.com)
+	License: Creative Commons Zero, CC0 1.0 Universal
+	         https://creativecommons.org/publicdomain/zero/1.0/
+
+	Free to use in personal, educational and commercial projects, with no
+	attribution required. Credited here anyway.
+
+			------------------------------
+
+	  brick_*   Bricks076A   walls, pillars, columns, stone stairs, barriers
+	  wood_*    Planks015    wooden floors and stairs, scaffold beams, crates,
+	                         barrels, tables, chests, shelves, torch handles
+	  gravel_*  Ground062S   every floor except the spawn platform
+	  tiles_*   Tiles139     the 8x8 m spawn platform at the origin, and the
+	                         grate trapdoors -- a trapdoor is set into a floor
+	                         rather than into loose gravel
+	  rock_*    Rock014      the darker grey on the walls: the frame at the
+	                         wall's full thickness, the pillars and their caps,
+	                         the foundations -- and the rubble pile at the end
+	                         of one hallway
+	  metal_*   Metal055A    the kit's silver fittings -- barrel and box
+	                         linings, chest and trunk bands, sword blades,
+	                         keys, torch heads, shield framing, banner poles,
+	                         and the spikes standing out of the trap plate
+	                         (whose base is tiles_*, a different swatch)
+
+	  wood_* also takes the ceiling slab. Its beams hang below it on their own
+	  swatch and are left on the kit atlas.
+
+	  metal_dark_color.jpg   the floor grates and the portcullis gates. Not a
+	                         download: `metal_color.jpg` tinted to the kit's own
+	                         dark iron. It shares metal_normal.jpg, and the glb
+	                         shares that image between both materials.
+
+	  kit_atlas.png          KayKit's own swatch atlas, brightened. Not one of
+	                         these downloads -- see KIT-LICENSE.txt one level up.
+
+			------------------------------
+
+	How they were made, so the numbers are in one place:
+
+	  GAMMA=1.4
+	  magick "<pack>_Color.jpg"    -resize 512x512 -gamma $GAMMA -quality 85  <name>_color.jpg
+	  magick "<pack>_NormalGL.jpg" -resize 512x512             -quality 92  <name>_normal.jpg
+
+	metal_color.jpg is the exception, and gets a contrast stretch as well.
+	Metal055A is nearly flat -- standard deviation 6 of 255, against brick's
+	16 -- so at prop scale it read as white plastic rather than as steel:
+
+	  magick "Metal055A_1K-JPG_Color.jpg" -resize 512x512 -gamma $GAMMA \
+	         -sigmoidal-contrast 7,78% -quality 85 metal_color.jpg
+	  magick metal_color.jpg -color-matrix "0.534 0 0  0 0.583 0  0 0 0.597" \
+	         -quality 85 metal_dark_color.jpg
+	  magick <atlas dumped from the .blend> -gamma $GAMMA -strip kit_atlas.png
+
+	metal_rough.jpg is the one map here that is not colour and not a normal:
+	Metal055A's Roughness, at 256 rather than 512. glTF packs metallic and
+	roughness into one image that Blender writes as a PNG whatever it is fed,
+	so the source resolution is the only lever on its size -- 512 came out
+	200 KB in the glb and 256 comes out 52 KB, for something with no high
+	frequencies in it. The pack's Metalness map is deliberately not shipped:
+	mean 254 of 255, standard deviation 2, which a constant factor says free.
+
+	  magick "Metal055A_1K-JPG_Roughness.jpg" -resize 256x256 -quality 88 metal_rough.jpg
+
+	GAMMA is the one brightness knob for the whole map, applied once to the
+	source rather than at render time -- see "Brightness belongs in the
+	textures" in levels/AUTHORING.md. Normals are never gamma-touched: a normal
+	map is a direction, not a colour, and is tagged Non-Color in Blender.
+
+	NormalGL rather than NormalDX: glTF and three.js both read normal maps in
+	the OpenGL convention, and the DX variant has its green channel inverted,
+	which lights every surface from the wrong side.
+
+	kit_atlas.png stays a PNG. Its 32 swatches are flat cells with hard edges,
+	the paint eyedropper picks texels straight out of them, and JPEG would bleed
+	one swatch into the next exactly where a picker lands.
+
+	The 1K originals are not committed -- re-download from ambientCG by the id
+	above if a larger source is ever needed. The other maps in each pack are
+	deliberately unused: see "Which maps to ship" in levels/AUTHORING.md.

@@ -97,7 +97,7 @@ export function registerMessages(room: GameRoom) {
     const player = room.state.players.get(client.sessionId);
     if (!player || !msg) return;
     const [x, y, z] = Array.isArray(msg.p) ? (msg.p as number[]) : [0, 0, 0];
-    // Per map, not per game: the dungeon is 52 across and the arena 40, and a
+    // Per map, not per game: the dungeon is 52 across and the lobby 34, and a
     // single bound meant whichever map was bigger had its far end amputated.
     const limit = mapLimit(room.state.map);
     player.x = clamp(x, -limit, limit);

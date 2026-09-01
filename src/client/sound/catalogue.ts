@@ -9,7 +9,8 @@ export type SoundName =
   | "tick"
   | "bell"
   | "gong"
-  | "ambient";
+  | "hideMusic"
+  | "huntMusic";
 
 export type SoundSpec = {
   url: string;
@@ -41,8 +42,14 @@ export const SOUNDS: Record<SoundName, SoundSpec> = {
   bell: { url: "/sounds/bell.mp3", gain: 0.85, positional: false },
   /** The round is decided, either way. See invariant 2. */
   gong: { url: "/sounds/gong.mp3", gain: 0.42, positional: false },
-  /** Seventy-six seconds of music, played once `MUSIC_DELAY_MS` after the bell. */
-  ambient: { url: "/sounds/ambient-music.mp3", gain: 0.2, positional: false, deferred: true },
+  /** The two music beds, one per phase. **Their gains are equal on purpose** —
+   *  the files are loudness-matched to each other (−15.2 LUFS integrated, 0.1 LU
+   *  apart), so one number sets the level of the music as such rather than of
+   *  either track. See invariant 4a. 0.095 puts them where `ambient` used to sit,
+   *  ~20 dB under the announcements: present, and never over a footstep. */
+  hideMusic: { url: "/sounds/hide-music.mp3", gain: 0.095, positional: false, deferred: true },
+  /** Played once `MUSIC_DELAY_MS` after the bell, so the bell rings alone. */
+  huntMusic: { url: "/sounds/hunt-music.mp3", gain: 0.095, positional: false, deferred: true },
 };
 
 export const SOUND_NAMES = Object.keys(SOUNDS) as SoundName[];

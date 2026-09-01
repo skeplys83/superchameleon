@@ -15,9 +15,10 @@ export type Mark = NetMark;
  */
 const SHOW_PATCH = false;
 
-/** Thick enough to read as a beam rather than a scratch. It was a 4 mm hairline
- *  when it was a black line and nobody was meant to look at it. */
-const TRACER_RADIUS = 0.03;
+/** Thick enough to read as a beam rather than a scratch, thin enough not to sit
+ *  across the crosshair. It was a 4 mm hairline when it was a black line nobody
+ *  was meant to look at, and briefly 3 cm, which read as a rope. */
+const TRACER_RADIUS = 0.012;
 
 const TRACER_OPACITY = 0.85;
 
@@ -28,14 +29,30 @@ const TRACER_OPACITY = 0.85;
  * stretch on a long shot and bunch on a short one and no two beams would look
  * like the same thing. Together they are the barber-pole's lean.
  */
-const TRACER_TWIST = 2;
-const TRACER_PITCH = 1.2;
+const TRACER_TWIST = 1.2;
+const TRACER_PITCH = 0.4;
 
-/** Turns per second the spiral rotates about its own axis, and hue cycles per
- *  second it runs along the beam. Both positive travel muzzle → wall; negative
- *  reads as the shot being pulled back in. */
-const TRACER_SPIN = 0.6;
-const TRACER_SPEED = 1.2;
+/**
+ * The spin, and how it dies.
+ *
+ * Turns per second about the tube's own axis, and hue cycles per second along
+ * it — both positive travel muzzle → wall. Each falls **exponentially** from
+ * its fast value towards its slow one with a time constant of
+ * `TRACER_SPINDOWN`, so the beam leaves the barrel turning hard, is most of the
+ * way stopped within half a second, and is all but still for the rest of its
+ * life. A linear or squared ramp spends too much of the life at a middling
+ * speed, which reads as a thing being turned rather than a thing running out.
+ *
+ * The cost is that beams no longer turn in step — they cannot, since each one's
+ * rate now depends on its own age — so the phase is integrated per beam rather
+ * than read off the scene clock.
+ */
+const TRACER_SPIN_FAST = 4.5;
+const TRACER_SPIN_SLOW = 0.04;
+const TRACER_SPEED_FAST = 6.5;
+const TRACER_SPEED_SLOW = 0.08;
+/** Seconds for the spin to fall to 1/e of the way from fast to slow. */
+const TRACER_SPINDOWN = 0.45;
 
 const MARK_LIFETIME = 3000;
 
@@ -43,6 +60,11 @@ const MARK_LIFETIME = 3000;
  *  for, so the fade lands exactly as the mark is dropped rather than leaving a
  *  beam to blink out at full brightness. */
 const TRACER_FADE = MARK_LIFETIME / 1000;
+
+/** The fraction of that life the fade actually takes. The beam holds full
+ *  opacity until it is about half spent and then goes — it should look like it
+ *  is there and then gone, not like it is dimming from the moment it lands. */
+const TRACER_TAIL = 0.45;
 
 const UP = new THREE.Vector3(0, 1, 0);
 
@@ -57,9 +79,10 @@ const UP = new THREE.Vector3(0, 1, 0);
  * real length**, so the stripes are a fixed size in the world instead of a
  * fixed count per shot.
  *
- * **A material per beam**, because two of the uniforms are the beam's own: how
- * long it is, and how far through its life it is. They still read the scene
- * clock, so they turn in step regardless.
+ * **A material per beam**, because most of the uniforms are the beam's own: how
+ * long it is, how far through its life it is, and how far it has spun — the
+ * spin rate falls with the fade, so the phase has to be integrated per beam
+ * rather than read off a clock they could share.
  */
 function tracerParams(): THREE.ShaderMaterialParameters {
   return {
@@ -70,13 +93,14 @@ function tracerParams(): THREE.ShaderMaterialParameters {
     // uniforms object by reference, so one literal would give every tracer the
     // same `uLength` and the same fade.
     uniforms: {
-      uTime: { value: 0 },
+      // Turns of spin and hue cycles of travel accumulated so far — a phase,
+      // not a clock, because the rate changes over the beam's life.
+      uPhase: { value: 0 },
+      uTravel: { value: 0 },
       uFade: { value: 1 },
       uLength: { value: 1 },
       uTwist: { value: TRACER_TWIST },
       uPitch: { value: TRACER_PITCH },
-      uSpin: { value: TRACER_SPIN },
-      uSpeed: { value: TRACER_SPEED },
       uOpacity: { value: TRACER_OPACITY },
     },
     vertexShader: /* glsl */ `
@@ -87,13 +111,12 @@ function tracerParams(): THREE.ShaderMaterialParameters {
       }
     `,
     fragmentShader: /* glsl */ `
-      uniform float uTime;
+      uniform float uPhase;
+      uniform float uTravel;
       uniform float uFade;
       uniform float uLength;
       uniform float uTwist;
       uniform float uPitch;
-      uniform float uSpin;
-      uniform float uSpeed;
       uniform float uOpacity;
       varying vec2 vUv;
 
@@ -108,8 +131,8 @@ function tracerParams(): THREE.ShaderMaterialParameters {
         // Along the tube in metres, and around it in turns. The spin goes on
         // the angular term and the travel on the axial one, so the spiral can
         // rotate and run at once without the two cancelling.
-        float along  = vUv.y * uLength * uPitch - uTime * uSpeed;
-        float around = (vUv.x - uTime * uSpin) * uTwist;
+        float along  = vUv.y * uLength * uPitch - uTravel;
+        float around = (vUv.x - uPhase) * uTwist;
         gl_FragColor = vec4(hue(fract(along + around)), uOpacity * uFade);
         #include <tonemapping_fragment>
         #include <colorspace_fragment>
@@ -139,21 +162,31 @@ function Tracer({ from, to }: { from: NetMark["origin"]; to: NetMark["position"]
    *  rather than the scene's. Null until then: `elapsedTime` is only meaningful
    *  from inside the loop. */
   const born = useRef<number | null>(null);
+  /** Turns spun, and hue cycles travelled, since this beam was drawn. Integrated
+   *  rather than read off the clock, because the rate falls as the beam fades. */
+  const phase = useRef(0);
+  const travel = useRef(0);
 
-  useFrame((state) => {
+  useFrame((state, delta) => {
     const m = material.current;
     if (!m) return;
     const now = state.clock.elapsedTime;
     born.current ??= now;
-    // The turn reads the scene clock, so every beam on screen spins in step
-    // instead of each one starting its rainbow from red.
-    m.uniforms.uTime.value = now;
     m.uniforms.uLength.value = length;
-    // Squared, so most of the beam's visible life is its first second and the
-    // rest is a ghost — a linear fade sits at half brightness for a second and
-    // a half, which reads as a rope left hanging rather than as a shot.
-    const left = Math.max(0, 1 - (now - born.current) / TRACER_FADE);
-    m.uniforms.uFade.value = left * left;
+    // Full brightness until it is about half spent, then out. The beam is meant to
+    // hang there having stopped; it was squared, which put it at half
+    // brightness the moment it stopped moving and read as a fault.
+    const age = now - born.current;
+    const left = Math.max(0, 1 - age / TRACER_FADE);
+    m.uniforms.uFade.value = Math.min(1, left / TRACER_TAIL);
+    // Exponential, on its own clock rather than the fade's — the spin is spent
+    // long before the beam goes, which is the point.
+    const k = Math.exp(-age / TRACER_SPINDOWN);
+    phase.current += (TRACER_SPIN_SLOW + (TRACER_SPIN_FAST - TRACER_SPIN_SLOW) * k) * delta;
+    travel.current +=
+      (TRACER_SPEED_SLOW + (TRACER_SPEED_FAST - TRACER_SPEED_SLOW) * k) * delta;
+    m.uniforms.uPhase.value = phase.current;
+    m.uniforms.uTravel.value = travel.current;
   });
 
   // A shot fired point-blank has nowhere to draw.

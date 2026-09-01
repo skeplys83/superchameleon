@@ -92,7 +92,7 @@ function ChatInput({ onClose }: { onClose: () => void }) {
       onBlur={onClose}
       // Every key is stopped here. The movement keys are bound on `window`
       // through drei's `KeyboardControls`, so without this typing "was" walks
-      // you across the arena. Esc is handled locally for the same reason:
+      // you across the lobby. Esc is handled locally for the same reason:
       // stopping the event means the global handler in `usePauseControl` never
       // sees it.
       onKeyDown={(e) => {

@@ -19,7 +19,13 @@ graves.
 
 1. **One raycast, people and walls together, and the nearer one wins.** Two
    casts let you shoot a chameleon through a wall, which is exactly the bug
-   hiding is built to prevent.
+   hiding is built to prevent. **And it resolves against the mesh's own
+   triangles** — skinning applied, so a pixel off a wrist is a miss. There was
+   an aim-assist ball around each body (world bounds × 1.4, floored at 0.6 m,
+   taken whenever it was nearer than the mesh); it made a chameleon killable
+   while nothing of them was under the crosshair, which is the opposite of what
+   hiding is for. The grown bounding volumes in `figure/model.ts` matter more
+   now, not less: they are the broad phase the exact test sits behind.
 2. **Graves are permanent and marks are not**, and that decides how each
    travels: a grave is schema state and arrives in a late joiner's backlog, a
    mark is a broadcast and is never stored. Getting it backwards gives you
@@ -75,9 +81,20 @@ is that plane's centre — so taking it out would mean rewriting the message to
 lose a decal. `visible={false}` costs nothing at draw time and one word brings
 it back.
 
-What is left is the beam, and it is drawn to be seen: a 3 cm tube where it used
-to be a 4 mm hairline, carrying a rainbow spiral that turns about its own axis,
-runs muzzle-to-wall, and fades out over the three seconds the mark lives.
+What is left is the beam: a 12 mm tube — it was a 4 mm hairline, then briefly
+3 cm, which read as a rope — carrying a rainbow spiral that turns about its own
+axis, runs muzzle-to-wall, and fades out over the three seconds the mark lives.
+
+**It spins down, then goes out — and the two are on different clocks.** The
+spin and the hue's travel each fall **exponentially** from a fast value at the
+shot towards a slow one, with a time constant of 0.45s, so the beam leaves the
+barrel turning hard and is all but still within a second. The fade does not
+follow it: the beam holds full opacity until it is about half spent and drops
+over the rest (`TRACER_TAIL`), so it reads as a thing that stopped
+and is still there rather than one dimming from the moment it lands. The cost
+of the spin-down is that beams no longer turn in step, which they cannot once
+the rate depends on a beam's own age: the phase is integrated per beam rather
+than read off the scene clock.
 
 The hue is a **function of position on the tube** in a `ShaderMaterial` —
 `uv.y` along it, `uv.x` around it — so the helix costs no geometry, there is no
@@ -100,14 +117,19 @@ DOM event in `players/`, and a prop between them is a React re-render per shot.
 It is one frame stale, which at a metre from the eye is nothing, and it is null
 whenever no viewmodel is mounted — then the origin falls back to the camera.
 
-**A material per beam**, because two of the uniforms are the beam's own — its
-length and how far through its life it is. `useMemo` on the constructor args
-rather than on the material itself, because `Marks` re-renders on every shot
-anybody fires and R3F would otherwise rebuild the material under a beam that is
-halfway through fading. They all read the scene clock, so they still spin in
-step. The fade is **squared**: most of the visible life is the first second and
-the rest is a ghost, where a linear fade sits at half brightness for a second
-and a half and reads as a rope left hanging.
+**And the barrel lies along the shot, not merely on it.** Starting the beam at
+the tip is not enough if the gun points somewhere else: the tracer then kinks
+the moment it leaves the muzzle, which is what the hand-picked inward tilt did
+— it converged about 2.7 m out and pointed wide of anything further. The gun
+group's rotation is now derived, aiming from `GUN` at `(0, 0, -CONVERGE)` on
+the camera's forward axis, which puts the whole barrel *on* the shot line. The
+recoil's climb still tips it off, deliberately.
+
+**A material per beam**, because most of the uniforms are the beam's own — its
+length, how far through its life it is, and how far it has spun. `useMemo` on
+the constructor args rather than on the material itself, because `Marks`
+re-renders on every shot anybody fires and R3F would otherwise rebuild the
+material under a beam that is halfway through fading.
 
 ## Contracts
 

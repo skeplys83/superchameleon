@@ -1,0 +1,19 @@
+	The lobby's models are KayKit's Dungeon Asset Pack, the same kit the
+	dungeon is built from — rubble, wall, wall_doorway and floor_tile_large.
+	The licence and credits are one folder over, in
+	levels/dungeon/KIT-LICENSE.txt (Creative Commons Zero).
+
+	**This level ships no textures.** Its four materials are flat colours, taken
+	from the mean of the photographic maps the room used to carry and then
+	desaturated a little, because a flat colour reads more saturated than a
+	photograph averaging to the same value:
+
+	  brick  #666660   the wall ring and its four doorways
+	  rock   #303133   the rubble cavern, and the walls' darker trim
+	  tiles  #867C70   the floor
+	  wood   #4A3928   the doors' leaves
+
+	That is deliberate and not a shortcut. The lobby is the one map whose frames
+	are shared with `MapWarmer` uploading the *next* map's textures, so it is the
+	worst place in the game to spend texture memory — and the detail was fighting
+	the room rather than helping it.

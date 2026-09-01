@@ -36,4 +36,4 @@ export const INPUT =
   "rounded-xl border-2 border-neutral-700 bg-neutral-900 px-3.5 py-2.5 text-sm font-semibold outline-none transition focus:border-neutral-400";
 
 /** The small capitals over a section. */
-export const LABEL = "text-[11px] font-bold uppercase tracking-widest";
+export const LABEL = "text-[0.6875rem] font-bold uppercase tracking-widest";

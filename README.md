@@ -131,7 +131,8 @@ src/
   client/
     app/    Game.tsx, Scene.tsx, the session hooks
     net/ world/ figure/ paint/ players/ combat/ sound/ hud/ <- the browser
-public/sounds/   nine .mp3 files, all peak-normalised to -1 dBFS
+public/sounds/   ten .mp3 files, peak-normalised to -1 dBFS; the two music
+                 beds are loudness-matched to each other instead
 ```
 
 Start at [CLAUDE.md](CLAUDE.md) for the map and the project-wide traps, then read

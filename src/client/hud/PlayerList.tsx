@@ -24,11 +24,11 @@ function Row({
   return (
     <div className="flex items-baseline gap-1.5 text-neutral-200">
       <span>{name}</span>
-      {showRole && <span className={`text-[10px] ${mark.tone}`}>{role}</span>}
+      {showRole && <span className={`text-[0.625rem] ${mark.tone}`}>{role}</span>}
       {/* The only green on the row. Your name and side are read the same way as
           everyone else's — the marker is what says which row is yours, and
           tinting the whole line made the side colour harder to compare. */}
-      {you && <span className="text-[10px] text-emerald-400">(you)</span>}
+      {you && <span className="text-[0.625rem] text-emerald-400">(you)</span>}
     </div>
   );
 }

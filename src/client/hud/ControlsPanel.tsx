@@ -58,7 +58,7 @@ function Cap({ label, action }: { label: string; action: string }) {
       <div className="flex h-11 min-w-11 items-center justify-center rounded-[0.9rem] border border-white/20 bg-black/60 px-3 font-mono text-sm font-semibold text-white backdrop-blur">
         {label}
       </div>
-      <div className="text-[10px] text-neutral-300">{action}</div>
+      <div className="text-[0.625rem] text-neutral-300">{action}</div>
     </div>
   );
 }

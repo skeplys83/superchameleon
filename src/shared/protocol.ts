@@ -76,7 +76,8 @@ export type ClientMessage = keyof typeof MESSAGES.toServer;
 /** What a client may receive. */
 export type ServerMessage = keyof typeof MESSAGES.toClient;
 
-/** Half-extent of the arena interior. `world/Room.tsx` builds the shell from it. */
+/** The reference half-extent a map's `bound` is measured against, and the
+ *  numerator of the cheat margin in `maps.ts`. No map is built to it any more. */
 export const ROOM_HALF = 20;
 
 /**

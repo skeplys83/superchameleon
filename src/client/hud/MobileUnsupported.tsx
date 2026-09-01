@@ -53,7 +53,7 @@ export function MobileUnsupported() {
           Super Chameleon requires a physical keyboard and mouse for first-person look, character movement, and surface camouflage.
         </p>
 
-        <div className="rounded-lg border border-neutral-800 bg-neutral-950/80 px-4 py-2.5 text-[11px] font-mono text-neutral-500">
+        <div className="rounded-lg border border-neutral-800 bg-neutral-950/80 px-4 py-2.5 text-[0.6875rem] font-mono text-neutral-500">
           Please open on a PC or laptop
         </div>
       </div>

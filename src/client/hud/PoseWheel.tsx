@@ -177,7 +177,12 @@ export function PoseWheel({
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/25">
-      <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
+      {/* Sized in rem, not in `SIZE`: the viewBox keeps every coordinate below in
+          user space, so the whole wheel — wedges, needle and the three font sizes
+          that are user units — rides the root scale in one step. `DEADZONE` and
+          `REACH` are untouched by that: the cursor is locked, so they are raw
+          pointer movement and never measured against what is drawn. */}
+      <svg className="h-[22.5rem] w-[22.5rem]" viewBox={`0 0 ${SIZE} ${SIZE}`}>
         {POSES.map((p, i) => {
           const mid = -Math.PI / 2 + i * step;
           const lit = i === choice;

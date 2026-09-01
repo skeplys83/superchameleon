@@ -11,7 +11,25 @@
  * `--font-mono` in the `@theme` block below; do not reintroduce a fetch.
  */
 
+/**
+ * **The one place the UI's size is set.** Every HUD utility is rem-based —
+ * Tailwind's spacing scale as much as its font sizes — so this single
+ * percentage scales the menus, the panels, the legends and the paint panel
+ * together, and no folder has to agree with any other about a size.
+ *
+ * A percentage rather than a px value on purpose: it scales the browser's own
+ * base size instead of replacing it, so a player who has set a larger default
+ * keeps the proportion they asked for.
+ *
+ * The rule that keeps it working: **nothing in the HUD is sized in px.** An
+ * arbitrary value belongs in rem (`text-[0.6875rem]`), or it stays the size it
+ * is while everything around it shrinks. `PoseWheel` is the one exception and
+ * only looks like one — its px are SVG user units inside a viewBox, scaled by
+ * the rem box the svg is drawn in.
+ */
 :root {
+  font-size: 87.5%;
+
   --background: #0a0a0a;
   --foreground: #ededed;
 }

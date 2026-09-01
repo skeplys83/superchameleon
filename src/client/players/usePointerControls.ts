@@ -45,19 +45,41 @@ const ZOOM_MAX = 14;
  */
 const PAINT_ZOOM = 2.8;
 const ZOOM_STEP = 0.0022; // per wheel pixel
+/**
+ * Seconds for the camera to cover about two thirds of a zoom change it was
+ * *given* rather than scrolled — which today means entering and leaving paint
+ * mode, and nothing else.
+ *
+ * **Exponential, so it is frame-rate independent**: a fixed fraction per frame
+ * would arrive at a different speed on a 144 Hz monitor than on a 60 Hz one.
+ * Short on purpose — this is a camera move the player asked for by pressing a
+ * key, and anything slower than about a fifth of a second stops reading as a
+ * move and starts reading as the controls being sluggish.
+ */
+const ZOOM_TAU = 0.11;
+/** Below this the ease is over; an exponential never actually arrives. */
+const ZOOM_EPSILON = 0.002;
 const MOUSE_SENSITIVITY = 0.0022;
 /**
- * How far down the view may tip — effectively straight down, so a chameleon can
- * look at the spot it is lying in from directly above.
+ * How far the view may tip, down and up — effectively straight either way, so a
+ * chameleon can look at the spot it is lying in from directly above, and at the
+ * ceiling it is about to climb.
  *
- * **Not exactly -PI/2.** `camera.lookAt` builds its orientation against a world
- * up of (0, 1, 0), and a view direction parallel to that has no defined roll —
- * straight down makes the third-person camera spin on its own axis. The 0.02
- * guard is the smallest angle that keeps it stable, and is a fifth of a degree
- * off vertical.
+ * **Neither is exactly PI/2.** `camera.lookAt` builds its orientation against a
+ * world up of (0, 1, 0), and a view direction parallel to that has no defined
+ * roll — straight up or down makes the third-person camera spin on its own
+ * axis. The 0.02 guard is the smallest angle that keeps it stable, and is a
+ * fifth of a degree off vertical.
+ *
+ * **Up used to stop at 0.9**, about 52°, which is not a look limit anybody
+ * chose: it was the angle at which the old camera jammed against the floor
+ * behind the player. The camera solves for that itself now — it shortens its
+ * leg as the view rises, continuously, and `Player.tsx` hides the figure it
+ * ends up inside — so the cap can be what the maths needs rather than what the
+ * geometry used to.
  */
 const PITCH_MIN = -Math.PI / 2 + 0.02;
-const PITCH_MAX = 0.9;
+const PITCH_MAX = Math.PI / 2 - 0.02;
 const PAINT_FLUSH_MS = 100;
 /** How much of the brush range one pixel of right-drag covers. The full range
  *  is about 250 px across, which is a comfortable flick. */
@@ -185,6 +207,8 @@ export function usePointerControls({
 
   /** The zoom paint mode borrowed, so leaving hands it back. */
   const zoomBefore = useRef<number | null>(null);
+  /** The tween closing the gap between `zoom` and `zoomTarget`, if one is. */
+  const zoomTween = useRef(0);
 
   useEffect(() => {
     paintingRef.current = painting;
@@ -193,21 +217,44 @@ export function usePointerControls({
       hint.current?.setVisible(false);
     }
 
-    // **Paint mode moves the camera in.** `followThirdPerson` snaps inwards and
-    // eases outwards — the same asymmetry the wheel already has — so this reads
-    // as stepping up to the body and strolling back off it.
+    // **Paint mode moves the camera in, over about a fifth of a second.** It
+    // sets the *target* and leaves `zoom` to `Player.tsx`, which closes the gap
+    // per frame — see `ZOOM_TAU`. It used to assign `zoom` outright, and the
+    // camera arrived before the panel did: a cut, not a move, and it read as
+    // the view glitching rather than as stepping up to your own body.
     //
     // The zoom is *borrowed*: what the player was looking at the room from is
     // put back when they leave, rather than the mode quietly redefining their
     // camera for the rest of the round. Anything they scroll to while painting
     // belongs to the mode and goes with it.
     if (painting) {
-      if (zoomBefore.current === null) zoomBefore.current = look.current.zoom;
-      look.current.zoom = Math.min(look.current.zoom, PAINT_ZOOM);
+      if (zoomBefore.current === null) zoomBefore.current = look.current.zoomTarget;
+      look.current.zoomTarget = Math.min(look.current.zoomTarget, PAINT_ZOOM);
     } else if (zoomBefore.current !== null) {
-      look.current.zoom = zoomBefore.current;
+      look.current.zoomTarget = zoomBefore.current;
       zoomBefore.current = null;
     }
+
+    // **The ease lives here because `Look` is written here.** `Player.tsx` reads
+    // it sixty times a second and never writes it — `react-hooks/immutability`
+    // enforces that, and the folder doc calls it the ownership line. So this is
+    // its own rAF rather than a line in the frame loop, running only while
+    // there is a gap to close and stopping the moment there is not.
+    cancelAnimationFrame(zoomTween.current);
+    let last = performance.now();
+    const ease = (now: number) => {
+      const delta = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      const gap = look.current.zoomTarget - look.current.zoom;
+      if (Math.abs(gap) < ZOOM_EPSILON) {
+        look.current.zoom = look.current.zoomTarget;
+        return;
+      }
+      look.current.zoom += gap * (1 - Math.exp(-delta / ZOOM_TAU));
+      zoomTween.current = requestAnimationFrame(ease);
+    };
+    zoomTween.current = requestAnimationFrame(ease);
+    return () => cancelAnimationFrame(zoomTween.current);
   }, [painting, look]);
 
   useEffect(() => {
@@ -376,11 +423,15 @@ export function usePointerControls({
     const onWheel = (e: WheelEvent) => {
       if (pausedRef.current || role === "hunter") return;
       e.preventDefault();
-      look.current.zoom = THREE.MathUtils.clamp(
-        look.current.zoom * (1 + e.deltaY * ZOOM_STEP),
+      // Both, so the wheel still lands on the frame it is turned. Only paint
+      // mode animates — see `zoomTarget` in `look.ts`.
+      const next = THREE.MathUtils.clamp(
+        look.current.zoomTarget * (1 + e.deltaY * ZOOM_STEP),
         ZOOM_MIN,
         ZOOM_MAX,
       );
+      look.current.zoom = next;
+      look.current.zoomTarget = next;
     };
 
     const onMouseMove = (e: MouseEvent) => {

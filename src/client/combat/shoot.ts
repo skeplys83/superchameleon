@@ -18,30 +18,23 @@ const SCREEN_CENTRE = new THREE.Vector2(0, 0);
 const SURFACE_OFFSET = 0.02;
 
 /**
- * A shot's hit volume is a **ball around the whole body**, not the body.
+ * **A shot hits the figure or it hits nothing.** The raycast is resolved
+ * against the mesh's own triangles, with the skinning applied, so what counts
+ * is what is under the crosshair — a pixel off a wrist is a miss.
  *
- * The figure is a stick: arms and legs a few centimetres across, and a shot
- * resolved against the mesh itself has to land on one of them. That reads as a
- * gun that misses what it is pointed at — worst of all against a chameleon
- * standing side-on or folded into a pose, where the mesh under the crosshair
- * may be nothing at all. So the mesh test stays as the exact answer and a
- * sphere is tried alongside it, whichever is nearer.
+ * This replaced an aim-assist ball: the body's world bounds inflated by 1.4 and
+ * floored at 0.6 m, tried alongside the mesh and taken whenever it was nearer.
+ * The reasoning was that a stick figure's limbs are a few centimetres across
+ * and a gun that misses what it is pointed at feels broken — but it made a
+ * chameleon killable while nothing of them was visible under the crosshair,
+ * which is the opposite of what hiding is for. **A hunter now has to actually
+ * hit what they are aiming at.**
  *
- * **It only ever helps the hunter**, which is the point: hiding is meant to be
- * won by not being *found*, not by being found and then survived because the
- * hitbox was the width of a wrist.
- *
- * Sized from the figure's own world bounds, so it follows the pose and the
- * body scale rather than assuming a standing chameleon.
+ * The bounding volumes grown in `figure/model.ts` are still load-bearing, and
+ * more so than before: they are the broad phase this exact test sits behind, and
+ * a volume that does not cover a reached-out arm rejects the shot before any
+ * triangle is looked at.
  */
-const HIT_INFLATE = 1.4;
-/** Floor for that, so a curled body is still a target worth pointing at. */
-const HIT_MIN_RADIUS = 0.6;
-
-const hitBox = new THREE.Box3();
-const hitSphere = new THREE.Sphere();
-const hitPoint = new THREE.Vector3();
-
 const worldNormal = new THREE.Vector3();
 const quat = new THREE.Quaternion();
 const facing = new THREE.Vector3();
@@ -58,7 +51,7 @@ export function resolveShot(
   const person = figures.length ? raycaster.intersectObjects(figures, true)[0] : null;
   const wall = raycaster.intersectObjects(solids, false)[0];
 
-  /** The nearest body the shot touches, by mesh or by ball. */
+  /** The body the shot landed on, if it landed on one at all. */
   let hitId: string | undefined;
   let hitDistance = Infinity;
   const hitAt = new THREE.Vector3();
@@ -72,25 +65,9 @@ export function resolveShot(
     if (id) {
       hitId = id;
       hitDistance = person.distance;
+      // The exact point on the body, which is where the grave belongs.
       hitAt.copy(person.point);
     }
-  }
-
-  // The ball, for everything the mesh test is too exact to catch.
-  for (const fig of figures) {
-    const id = fig.userData.remoteId as string | undefined;
-    if (!id || id === hitId) continue;
-    hitBox.setFromObject(fig);
-    if (hitBox.isEmpty()) continue;
-    hitBox.getBoundingSphere(hitSphere);
-    hitSphere.radius = Math.max(hitSphere.radius * HIT_INFLATE, HIT_MIN_RADIUS);
-    if (!raycaster.ray.intersectSphere(hitSphere, hitPoint)) continue;
-    const distance = raycaster.ray.origin.distanceTo(hitPoint);
-    if (distance >= hitDistance) continue;
-    hitId = id;
-    hitDistance = distance;
-    // The mark belongs on the body, not on the shell of the ball around it.
-    hitAt.copy(hitSphere.center);
   }
 
   if (hitId && (!wall || hitDistance < wall.distance)) {

@@ -2,7 +2,7 @@ import { Footer } from "./Footer";
 
 /**
  * The legal page. It replaces the start menu rather than navigating anywhere,
- * so the arena keeps rendering behind it and the background is unchanged —
+ * so the lobby keeps rendering behind it and the background is unchanged —
  * there is one page in this app and no router, and adding one for a page of
  * text would put the game's whole state behind a URL.
  */

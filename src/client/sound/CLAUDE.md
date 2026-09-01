@@ -7,7 +7,7 @@
 | file             | what                                                      |
 | ---------------- | ----------------------------------------------------------- |
 | `engine.ts`      | the context, one-shots, loops, unlocking, suspending, preload |
-| `catalogue.ts`   | the nine files, and the gain and rate each is played at      |
+| `catalogue.ts`   | the ten files, and the gain and rate each is played at        |
 | `footsteps.ts`   | `Stepper`: distance travelled → a step, per player           |
 | `SoundStage.tsx` | the listener, and a stepper for each remote figure            |
 
@@ -22,15 +22,17 @@
    mute. The music is fetched on arriving in a lobby, not on opening the page.
 3. **Whoever starts a loop must stop it.** Nothing else will. Loops are keyed by
    name, at most one runs per name, and `app/Game.tsx` stops them all on
-   `onLeftRoom`, on a drop and on unmount. `ambient` is the one with a phase
-   attached: `useRoundAudio` starts it on the hunt and stops it on *any* phase
-   that is not the hunt, so it cannot play under the gong.
+   `onLeftRoom`, on a drop and on unmount. The two music beds are the ones with
+   a phase attached: `useRoundAudio` starts `hideMusic` on hiding and
+   `huntMusic` on the hunt, and stops each on *any* phase that is not its own,
+   so neither plays under the gong and the two never sound together.
 
-   **`ambient` loops, and its file is not cut for looping.** 76.6s long, with a
-   half-second fade-in from silence (−68 dB mean) against a tail that is still
-   sounding (−19.8 dB peak) — so the seam is a short hole rather than a click.
-   Closing it means trimming the head and crossfading the file into itself; see
-   invariant 6 in the archive for the same problem on `brush`.
+   **Both loop forever, and neither knows how long its phase is.** `hideMusic`
+   is 34.96s against a 35s hiding phase, `huntMusic` 89.14s against a hunt of
+   several minutes — but the length of a phase is not a fact either file
+   encodes, so changing `HIDE_SECONDS` or a map's `roundSeconds` needs nothing
+   here. **That is only true because both seams are closed** — see invariant 6
+   in the archive, and 4a for why their gains are equal.
 
 ## Contracts
 

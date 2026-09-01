@@ -10,6 +10,7 @@ import type * as THREE from "three";
 import { ROOM_SURFACE } from "./surface";
 import { useDevMode } from "@/client/app/dev";
 import { checkLevel, prepareLevel, type LevelCollider } from "./levelScene";
+import { ShadowBudget } from "./ShadowBudget";
 import type { GameMap } from "@/shared/maps";
 
 /**
@@ -45,6 +46,9 @@ export function GltfLevel({ level }: { level: GameMap }) {
           object in a .blend — see invariant 15. */}
       {/* No `RigidBody`: nothing that is drawn is collided with. */}
       <primitive object={prepared.scene} />
+      {(level.render.lights?.shadow?.budget ?? 0) > 0 && (
+        <ShadowBudget lamps={prepared.lamps} budget={level.render.lights!.shadow!.budget!} />
+      )}
       {prepared.colliders.map((collider, i) => (
         <Collider key={i} collider={collider} show={showCollision} />
       ))}

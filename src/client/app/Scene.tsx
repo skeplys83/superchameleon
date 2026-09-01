@@ -183,7 +183,22 @@ export default function Scene({
           gl.toneMappingExposure = render.exposure ?? 1;
           gl.outputColorSpace = THREE[render.outputColorSpace ?? "SRGBColorSpace"];
           gl.shadowMap.enabled = render.shadows?.enabled ?? true;
-          gl.shadowMap.type = THREE[render.shadows?.type ?? "PCFSoftShadowMap"];
+          // Deliberately not `PCFSoftShadowMap`: deprecated in three 0.185,
+          // which warns and falls back to this anyway. See `shared/maps.ts`.
+          gl.shadowMap.type = THREE[render.shadows?.type ?? "PCFShadowMap"];
+          // **This callback runs once, at Canvas creation, and never again.**
+          // Everything above is read from whichever map happened to be current
+          // then — the lobby map, usually — so a later map's tone mapping,
+          // exposure and shadow settings only apply if the Canvas was rebuilt
+          // with it. Printed in dev because a renderer configured for the wrong
+          // map looks like a map that is simply wrong.
+          if (DEV) {
+            console.info(
+              `renderer configured once, at Canvas creation: ` +
+              `shadowMap.enabled=${gl.shadowMap.enabled}, type=${gl.shadowMap.type}, ` +
+              `toneMapping=${gl.toneMapping}, exposure=${gl.toneMappingExposure}`,
+            );
+          }
           if (render.fog) {
             scene.fog = new THREE.Fog(render.fog.color, render.fog.near, render.fog.far);
           }

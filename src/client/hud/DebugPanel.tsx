@@ -71,7 +71,7 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
 
 function Head({ children }: { children: React.ReactNode }) {
   return (
-    <div className="mt-2 mb-0.5 border-t border-neutral-800 pt-1.5 first:mt-0 first:border-t-0 first:pt-0 text-[9px] font-bold uppercase tracking-[0.18em] text-lime-400">
+    <div className="mt-2 mb-0.5 border-t border-neutral-800 pt-1.5 first:mt-0 first:border-t-0 first:pt-0 text-[0.5625rem] font-bold uppercase tracking-[0.18em] text-lime-400">
       {children}
     </div>
   );
@@ -129,7 +129,7 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
     // Clear of `hud/ChatPanel`, which owns bottom-left at `w-80`. Offset
     // always rather than only in a lobby: a dev chip that moves about between
     // rooms is harder to find than one that does not.
-    <div className="pointer-events-none absolute bottom-4 left-[22rem] z-30 flex w-60 select-none flex-col items-start gap-1.5 font-mono text-[10px] leading-[1.4] tabular-nums text-neutral-300 antialiased">
+    <div className="pointer-events-none absolute bottom-4 left-[22rem] z-30 flex w-60 select-none flex-col items-start gap-1.5 font-mono text-[0.625rem] leading-[1.4] tabular-nums text-neutral-300 antialiased">
       {on && (
         <div className="max-h-[calc(100dvh-5rem)] w-full overflow-y-auto rounded border border-lime-400/25 bg-black/95 px-3 py-2">
           <Head>room</Head>
@@ -236,7 +236,7 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
       <button
         type="button"
         onClick={toggleDevMode}
-        className={`pointer-events-auto flex items-center gap-2 rounded border px-1.5 py-0.5 font-mono text-[10px] transition-colors ${
+        className={`pointer-events-auto flex items-center gap-2 rounded border px-1.5 py-0.5 font-mono text-[0.625rem] transition-colors ${
           on
             ? "border-lime-400/40 bg-black/95 text-neutral-300 hover:border-lime-400"
             : "border-neutral-700 bg-black/70 text-neutral-500 hover:border-neutral-500 hover:text-neutral-300"

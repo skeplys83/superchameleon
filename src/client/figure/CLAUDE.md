@@ -137,6 +137,14 @@ between orientations with the same damping the joints use.
 
 ## Contracts
 
+- **A figure casts no shadow, and that is a game rule.** `model.ts` sets
+  `castShadow` on the loaded template; `StickFigure` turns it off for every
+  figure in play, hunters included. A chameleon lying against a wall it is
+  painted to match is given away by the shadow it throws long before the paint
+  fails, and it is the one cue no amount of matching can answer. The shotgun
+  goes with it (`combat/Shotgun.tsx`) — as a viewmodel its shadow is cast by
+  something nobody can see, and on a body it would be a gun-shaped shadow with
+  no owner underneath.
 - **A pose's `centre` is where the body's mass ends up, measured — not the
   figure's own shift repeated.** `offsetY`/`offsetZ` move the *figure* inside
   its collider, `centre` moves the *collider*, and the trap is that they are not

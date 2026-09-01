@@ -1,13 +1,13 @@
 /** The map ids, and nothing else. The order is the order every list shows. */
-export const MAP_IDS = ["arena", "hospital", "dungeon"] as const;
+export const MAP_IDS = ["lobby", "hospital", "dungeon"] as const;
 
 export type MapId = (typeof MAP_IDS)[number];
 
 /** What a room uses when nobody chose, or chose something this build lacks. */
-export const DEFAULT_MAP: MapId = "arena";
+export const DEFAULT_MAP: MapId = "lobby";
 
-/** The arena is not a map you pick — it is where every lobby waits. */
-export const LOBBY_MAP: MapId = "arena";
+/** Not a map you pick — it is where every lobby waits. */
+export const LOBBY_MAP: MapId = "lobby";
 
 /** The maps a match can actually be played on. */
 export const MATCH_MAP_IDS = MAP_IDS.filter((id) => id !== LOBBY_MAP);

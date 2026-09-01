@@ -45,7 +45,7 @@ export function PauseMenu({
         {/* There is no way back into a round you walked out of, so the button
             says so. Leaving a match used to drop you in the waiting room with
             the clock still running, which read as still being in the game. */}
-        <div className="text-[11px] font-medium text-neutral-500">
+        <div className="text-[0.6875rem] font-medium text-neutral-500">
           {"Leaving ends the game for you \u2014 click Resume to continue"}
         </div>
       </div>

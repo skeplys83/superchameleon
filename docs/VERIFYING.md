@@ -23,8 +23,12 @@ fail CI. `src/server/CLAUDE.md` lists what each file covers.
 Still uncovered, and still hand-checked: the round trip home from a finished
 match, reconnection into a held seat, and the twenty-second drop window.
 
-**The client has no automated tests.** It is three.js in a frame loop, and the
-things that break are visual. What you can still do on your own:
+**Almost nothing on the client is tested.** It is three.js in a frame loop, and
+the things that break are visual. Two suites are the exception, both in
+`src/client/players/test/`: `inside.test.ts` on keeping a body in the room, and
+`camera.test.ts` on where the follow camera may sit — pure geometry, no React
+and no WebGL, so they run headlessly like any other. Anything shaped like that
+belongs there rather than in a paragraph. What you can still do on your own:
 
 - **Pure logic, headlessly.** Modules with no React or WebGL — the footstep
   stepper, stroke encoding, pose extents — import straight into Node, since it

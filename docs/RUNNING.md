@@ -49,10 +49,9 @@ instant it starts. Which window gets the gun is the server's draw, and not
 negotiable. Allow popups for localhost or the second window never opens; the
 console says so when it is blocked.
 
-**`./scripts/export-level.sh <id>` rebuilds a map, and bakes what needs baking**
-— about 2.5 s for the dungeon, of which the dirt ground's Cycles bake and its
-tiling check are ~1 s. It rewrites `levels/dungeon/textures/dirt_ground.png` as it goes,
-so that file turning up modified after an export is the pipeline working.
+**`./scripts/export-level.sh <id>` rebuilds a map** — about 1.5 s for the
+dungeon. It writes only `public/maps/<id>.glb`; nothing under `levels/` is
+generated, so a level's folder should come back from an export unmodified.
 
 Useful env vars: `PORT` (web, default 3000), `GAME_PORT` (Colyseus, default 2567 in dev, defaults to `PORT` in production for single-port hosting),
 `HMR_PORT` (Vite's dev socket, default 24678), `PUBLIC_GAME_PORT` (what clients

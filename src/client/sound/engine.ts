@@ -3,7 +3,8 @@ import { DEFERRED_SOUNDS, EAGER_SOUNDS, SOUNDS, type SoundName } from "./catalog
 
 /** How far a positional sound carries before it starts to fade. */
 const REF_DISTANCE = 3.5;
-/** Clamps the distance used in the falloff. Just past the arena's diagonal. */
+/** Clamps the distance used in the falloff. Comfortably past the lobby's
+ *  34 m width; the match maps are larger and rely on the rolloff instead. */
 const MAX_DISTANCE = 60;
 /** How sharply it falls once past `REF_DISTANCE`. Higher is a smaller-sounding room. */
 const ROLLOFF = 1.25;

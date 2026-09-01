@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { playSound, startLoop, stopLoop } from "@/client/sound/engine";
+import { playSound, preloadMusic, startLoop, stopLoop } from "@/client/sound/engine";
 import {
   GONG_FALLOFF,
   GONG_GAP_MS,
@@ -11,8 +11,9 @@ import type { Phase } from "@/shared/protocol";
 
 /**
  * Everything the round itself makes a noise about: the clock's tick, the bell
- * when hiding ends, and the gong that closes it. All of it is driven by the
- * phase changing rather than by a message — there is no "match over" message,
+ * when hiding ends, the gong that closes it, and the one music bed each of the
+ * two playable phases owns. All of it is driven by the phase changing rather
+ * than by a message — there is no "match over" message,
  * and adding one would only be a second thing that can disagree with the phase.
  */
 export function useRoundAudio(phase: Phase | undefined, secondsLeft: number) {
@@ -37,16 +38,40 @@ export function useRoundAudio(phase: Phase | undefined, secondsLeft: number) {
     const before = lastPhase.current;
     lastPhase.current = phase;
 
-    // **The music belongs to the hunt and to nothing else**, so this is a fact
-    // about the phase rather than about the transition into it. It stops the
+    // **Each bed belongs to one phase and to nothing else**, so this is a fact
+    // about the phase rather than about the transition into it. Both stop the
     // moment the round is decided rather than playing under the gong and the
-    // reveal, and it starts below for somebody who arrives mid-hunt and never
-    // heard the bell — a reconnection, or a caught player coming back in.
-    if (phase !== "hunt") stopLoop("ambient");
+    // reveal, and each starts below for somebody who arrives part-way in and
+    // never heard the transition — a reconnection, or a caught player coming
+    // back. Ordered stop-then-start: the two are never sounding together.
+    if (phase !== "hiding") stopLoop("hideMusic");
+    if (phase !== "hunt") stopLoop("huntMusic");
 
     if (!phase || before === phase) return;
 
     const timers: ReturnType<typeof setTimeout>[] = [];
+
+    /**
+     * Both files are `deferred`, so the buffer may still be decoding when its
+     * phase opens — and `startLoop` silently does nothing without one, which
+     * would cost the whole phase its music rather than the first second of it.
+     * `preloadMusic` is idempotent, so awaiting it here is a no-op once loaded
+     * and a wait for the fetch otherwise. The phase is re-checked when it
+     * settles, because it may have moved on while we waited.
+     */
+    const startWhenLoaded = (name: "hideMusic" | "huntMusic", forPhase: Phase) => {
+      void preloadMusic().then(() => {
+        if (phaseRef.current !== forPhase) return;
+        // `startLoop` is a no-op when that name is already going, so arriving
+        // twice is harmless. It loops forever: whoever starts it stops it, and
+        // the phase length is nothing the sound engine knows or needs to.
+        startLoop(name);
+      });
+    };
+
+    // The chameleons are scattering and the hunter is alone in the lobby. Same
+    // bed for both, so nobody can tell from the audio which side they are on.
+    if (phase === "hiding") startWhenLoaded("hideMusic", "hiding");
 
     if (phase === "hunt") {
       /** Straight out of the hiding phase, rather than arriving part-way in. */
@@ -54,8 +79,6 @@ export function useRoundAudio(phase: Phase | undefined, secondsLeft: number) {
       if (fromTheBell) {
         // Hiding is over and the hunter is on their way in.
         playSound("bell");
-        /** Anything already playing is stopped before the wait, not after it. */
-        stopLoop("ambient");
       }
       timers.push(
         setTimeout(
@@ -64,9 +87,7 @@ export function useRoundAudio(phase: Phase | undefined, secondsLeft: number) {
             // covers the ordinary case; this covers a call that outlived the
             // code that scheduled it, which is what a hot reload produces.
             if (phaseRef.current !== "hunt") return;
-            // Looping, so it runs for the whole hunt. `startLoop` is a no-op
-            // when that name is already going, so arriving twice is harmless.
-            startLoop("ambient");
+            startWhenLoaded("huntMusic", "hunt");
           },
           // The delay is there to let the bell ring alone. Nobody arriving
           // late heard the bell, so there is nothing to wait for.

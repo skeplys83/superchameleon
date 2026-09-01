@@ -151,7 +151,14 @@ export function StickFigure({
           new THREE.MeshStandardMaterial({ map: skin, roughness: 1, metalness: 0 });
       character.mesh.material = material;
       character.mesh.renderOrder = highlight ? REVEAL_ORDER : 0;
-      character.mesh.castShadow = !highlight;
+      // **A body casts no shadow, and that is a game rule rather than a
+      // graphics setting.** A chameleon lying against a wall it is painted to
+      // match is given away by the shadow it throws long before the paint
+      // fails — the one cue no amount of matching can answer. `figure/model.ts`
+      // sets this true on the loaded template; every figure in play overrides
+      // it here, hunters included, so that a shadow is never the thing that
+      // finds somebody.
+      character.mesh.castShadow = false;
       // What the paint raycast looks for. There are no per-part meshes any
       // more: the hit's UV says which part it landed on — see `parts.ts`.
       character.mesh.userData.body = true;

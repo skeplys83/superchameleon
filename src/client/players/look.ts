@@ -17,6 +17,17 @@ export type Look = {
   /** Positive looks up. */
   pitch: number;
   zoom: number;
+  /**
+   * Where the zoom is heading, which the frame loop eases `zoom` toward.
+   *
+   * **Two fields rather than one because the two writers want different
+   * things.** The wheel sets both and lands instantly: a scroll is the player's
+   * own hand and a lag between turning it and the camera moving reads as the
+   * control being broken. Paint mode sets only this one, so stepping up to the
+   * body is a move the player watches rather than a cut. `Player.tsx` closes
+   * the gap; nothing else ever writes `zoom` directly.
+   */
+  zoomTarget: number;
   /** Whether this client currently holds the pointer lock. */
   locked: boolean;
   /** Chameleons never take the lock, so they look around by dragging. */
@@ -29,6 +40,7 @@ export const newLook = (): Look => ({
   yaw: 0,
   pitch: -0.2,
   zoom: CAMERA_DISTANCE,
+  zoomTarget: CAMERA_DISTANCE,
   locked: false,
   orbiting: false,
   focused: true,

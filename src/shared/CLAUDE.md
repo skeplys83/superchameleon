@@ -32,13 +32,19 @@ doc names the constant beside the number for exactly this reason.
 3. **`ROOM_LIMIT` is deliberately not `ROOM_HALF`.** 19.9 against 20 is the
    margin that stops a client's own rounding reading as cheating. `mapLimit`
    applies the same margin per map, because the dungeon is 52 across and the
-   arena 40 — a single global bound amputated whichever map was bigger.
+   lobby 34 — a single global bound amputated whichever map was bigger.
 
 ## Contracts
 
 - **`maps.ts` is read by the server** for `mapRoundSeconds` and `mapLimit`, and
   by the client for everything else. It is pure data, which is why it lives here
   rather than in `client/world/`.
+- **`render.shadows` is the renderer's switch; the map file decides what casts.**
+  Enabling it only turns the shadow map on — a light casts if and only if its
+  name starts with `shadow_` in the `.glb`, which is why the hospital can ship
+  `enabled: true` and render identically until a lamp is renamed in Blender.
+  `shadow.exclude` gates `castShadow` by name prefix on the level's own meshes;
+  they receive either way. See `levels/AUTHORING.md`.
 - **`DEV_ONLY_MAPS` hides a map from the menus, not from the server.** A map
   still being built is filtered out by `playableMaps(dev)`, which every picker
   calls with `DEV` — vite substitutes that, so in the image the entry is dead

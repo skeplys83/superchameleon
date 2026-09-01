@@ -63,7 +63,7 @@ export class Stepper {
 
     const moved = Math.hypot(dx, dz);
 
-    // Crossing the arena in one frame is not a stride. Without this a respawn
+    // Crossing the lobby in one frame is not a stride. Without this a respawn
     // lands a footfall on arrival.
     if (moved > WARP_DISTANCE) {
       this.travelled = 0;

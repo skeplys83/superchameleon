@@ -33,6 +33,22 @@ follows your head, and the footstep derivation.
   the listener and plays the
   networked events. Renders nothing.
 
+### Where the music came from
+
+Both beds are **CC0**, from Freesound, so nothing in the repo owes an
+attribution — recorded here only so a future edit knows what it is holding and
+does not have to re-establish the licence.
+
+| file             | source                                                                       | as published        |
+| ---------------- | ---------------------------------------------------------------------------- | ------------------- |
+| `hide-music.mp3` | *Trotting Along* — code_box, [614726](https://freesound.org/s/614726/)        | WAV, 35.000 s, CC0  |
+| `hunt-music.mp3` | *You Could Hear A Pen Drop* — Beetlemuse, [557474](https://freesound.org/s/557474/) | WAV, 97.715 s, CC0 |
+
+**Both were taken from Freesound's 128 kbps preview rather than the original
+WAV**, which needs an account to download. That is one lossy generation before
+ours. It is inaudible at the level these play at, but if either bed is ever
+reworked, start from the original upload rather than from the file in `public/`.
+
 ## Invariants
 
 1. **Positional sounds must be mono.** A stereo buffer cannot be spatialised —
@@ -89,6 +105,34 @@ follows your head, and the footstep derivation.
    out and were left there. The spread across the catalogue is 0.3 dB, and the
    purpose of the rule — a known, consistent level, so a gain means something —
    is met.
+
+   **4a. The two music beds are matched on loudness, not on peak — and that is
+   a deliberate exception to the rule above.** They are the only two files that
+   have to be interchangeable: they play in the same role, one phase apart, and
+   the brief was that neither is louder than the other. Peak is the wrong
+   quantity for that, because perceived level tracks the *average*, and the two
+   have different crest factors — `hide-music` is struck marimba and drum,
+   `hunt-music` is sustained bells. Peak-normalising both to −1 dBFS leaves them
+   0.8 LU apart, which is audible as a step at the bell.
+
+   So both are normalised to the same **integrated loudness, −15.2 LUFS** (EBU
+   R128), and the peak ceiling is honoured by whichever of the two is hotter:
+   `hide-music` lands at −1.2 dBFS and `hunt-music` at −1.9. Neither is above
+   −1, so invariant 4's actual purpose — headroom, and a gain that means
+   something — still holds; what changes is that the *pair* is levelled rather
+   than each file alone. **They therefore carry the same catalogue gain, and
+   changing one without the other is a bug.**
+
+   ```bash
+   ffmpeg -hide_banner -i f.mp3 -af ebur128=framelog=quiet -f null -   # read I
+   ffmpeg -y -i f.wav -af "volume=<target minus I>dB" -c:a libmp3lame -b:a 128k f.mp3
+   ```
+
+   0.095 was then chosen so the pair sits exactly where the old single
+   `ambient` bed did: that file was −21.7 LUFS at gain 0.2, i.e. −35.7 LUFS
+   arriving at the master, and −15.2 LUFS at 0.095 is −35.7. **The level was
+   already tuned and is not being re-litigated** — only the files under it
+   changed.
 5. **Everything is MP3: not wav, and not Opus.** Opus is a further 25% smaller
    and was rejected because its Ogg-container support in Safari is patchy, and a
    guest opens this game on whatever device is to hand. Same reasoning as trap 3:
@@ -111,6 +155,29 @@ follows your head, and the footstep derivation.
    ffmpeg -ss <duration-0.004> -t 0.004 -i loop.wav -af volumedetect -f null /dev/null
    ffmpeg -i loop.wav -af "afade=t=in:st=0:d=0.004,afade=t=out:st=<d-0.012>:d=0.012" out.wav
    ```
+
+   **The music beds needed the stronger version of this, and a fade would have
+   been the wrong tool for both.** A fade closes a click by opening a hole,
+   which is fine for `brush` at 0.78 s and ruinous for a bed that wraps in the
+   open. Both were cut to a whole number of their own period instead, found by
+   autocorrelating the head against every candidate lag, and then self-
+   crossfaded over 40 ms so the material either side of the seam is the same
+   material:
+
+   - `hide-music` — period 8.750 s; the source is exactly 4 of them (35.000 s)
+     and so is already a loop musically, but the wrap still stepped 0.098 in
+     one sample against a p99.9 of 0.050, which is an audible click. Cut to
+     34.960 with the last 40 ms laid over the head: step 0.0065, under the
+     median.
+   - `hunt-music` — period 3.4285 s. The source ends by falling off a cliff into
+     1.84 s of digital silence, so it cannot simply be truncated. 26 periods
+     (89.14145 s) correlate with the head at 0.95, the best of any candidate
+     lag; cut there, the wrap steps 0.00004 against a median of 0.00076.
+
+   **Measure the wrap, do not eyeball the waveform.** The check is the
+   last-sample-to-first-sample delta against the file's own distribution of
+   adjacent-sample deltas — a step inside the p99.9 is inaudible, one above it
+   is the click.
 
 7. **The context unlocks on *any* gesture, not just the join click.** Browsers
    start every context suspended and only honour `resume()` from a user gesture.
@@ -136,7 +203,7 @@ follows your head, and the footstep derivation.
    catalogue — 1.3 MB — downloaded for anybody who so much as opened the game.
    The fetch now hangs off the moment each half is wanted, both called from
    `Game.tsx`: `preloadSounds` (the eight small sounds, 126 KB) from the join
-   click inside `unlockAudio`, and `preloadMusic` (`ambient` alone, 1.2 MB) from
+   click inside `unlockAudio`, and `preloadMusic` (the two music beds, 1.9 MB) from
    arriving in a lobby and again at the countdown — the same two triggers as the
    map, because it is an asset of the round about to be played. **Do not put a
    preload back in a mount effect**, here or in `SoundStage`; the same rule, and
@@ -224,7 +291,8 @@ follows your head, and the footstep derivation.
     per-instance, so it cannot see what a previous instance started, and the two
     then overlap — which reads as a sound playing twice and is not reproducible
     from the source, because there is only ever one call site. `Game.tsx` stops
-    `ambient` before scheduling it and re-checks the phase when the timer fires,
+    each music bed before scheduling it and re-checks the phase when the timer
+    fires,
     so a round always begins from silence whatever the last edit left running.
     **If a sound doubles in development, hard-reload before hunting for a second
     caller.**
@@ -316,8 +384,8 @@ part of this project's workflow — see the root CLAUDE.md.
 ## Not built yet
 
 No UI sounds, no volume control or mute in the HUD — which the music makes more
-conspicuous than it was. No ambience between rounds: `ambient` plays once as a
-hunt begins and there is silence either side of it. No
+conspicuous than it was. No ambience between rounds: the beds cover
+hiding and the hunt, and the countdown and the reveal are silent. No
 reverb, so the arena sounds like open air rather than a room. **Nobody else hears
 you brushing** — the loop is local, because "is painting" is not on the wire. It
 would be a fair thing to broadcast, and a good way to be found. Nothing varies

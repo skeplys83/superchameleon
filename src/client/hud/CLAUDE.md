@@ -53,7 +53,7 @@ reads them from there now.
   whose clock was still running — indistinguishable from still being in the
   round. Either you are playing it or you are out.
 - **Every map picker asks `playableMaps(DEV)`, never `MATCH_MAP_LIST`.** Two
-  things are filtered out: the arena, which is where you already are, and any id
+  things are filtered out: the lobby map, which is where you already are, and any id
   in `DEV_ONLY_MAPS` — a map still being built. `DEV` is substituted by vite, so
   in the image those entries are dead code and the map cannot be reached from
   the UI. **The server still accepts them**: it cannot tell which build asked,
@@ -140,7 +140,7 @@ reads them from there now.
   *not* gated on `paused` or `painting`, because a prompt that is legible while
   the key does nothing is worse than no prompt. Its input **stops every keydown**: the movement keys are bound on
   `window` by drei's `KeyboardControls`, so without it typing "was" walks you
-  across the arena. That is also why Esc is handled inside the input rather
+  across the lobby. That is also why Esc is handled inside the input rather
   than by `usePauseControl` — the stopped event never reaches the global one.
 - **`HuntVision` is grain and a vignette over the hunter's own view**, on
   exactly the condition `Scene` blurs on — the hunt *and* the reveal, so a

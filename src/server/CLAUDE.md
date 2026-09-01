@@ -29,7 +29,7 @@ which is why imports must name the real file (`./room.ts`).
 
 ## One class, two names
 
-A **lobby** is the arena: playable, holds the invite code, does not auto-dispose.
+A **lobby** is the lobby map: playable, holds the invite code, does not auto-dispose.
 A **match** is the game proper on the chosen map. `this.roomName` is the only
 thing that tells them apart, because movement, paint, kills and whistles are
 identical in both. The cycle is lobby → countdown → match → back to the *same*
@@ -134,7 +134,7 @@ lobby, and `state.lobby` is the field that makes the return trip possible.
 - `host.test.ts` — the Start button: the creator keeps it, it stays vacant while
   a match runs, and it moves by first arrival rather than by who is standing
   closest.
-- `lobby.test.ts` — the code, everybody armed, `kill` refused, the arena refused
+- `lobby.test.ts` — the code, everybody armed, `kill` refused, the lobby map refused
   as a match map, a guest's `start` ignored, the countdown starting and
   cancelling, the door closed to strangers, and the draw producing exactly one
   hunter who does *not* travel at Start.

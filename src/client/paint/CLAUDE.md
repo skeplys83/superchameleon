@@ -52,18 +52,26 @@ the picker returns is lit and tone-mapped like every other surface. Returning
 the *drawn pixel* therefore applies the room's lighting twice: pick a floor
 rendering at 40% brightness, paint it on, and the body renders at 16%. That was
 "I picked the ground and it came out way darker", and it got worse the darker
-the map — obvious in the dungeon, barely visible in the arena.
+the map — obvious in the dungeon, barely visible in the old white arena.
 
 Albedo against albedo is also just what camouflage is. Two surfaces with the
 same base colour under the same light render the same colour.
 
 So `albedo.ts` raycasts the drawn geometry on the click itself and returns
-`material.color` times the texel under the hit UV. Both maps make that exact:
-the arena's twelve materials are untextured and **named for their own hex**
-(11 of 12 round-trip to their own name through the linear→sRGB conversion; the
-twelfth is just called "Material"), and the dungeon is a 1024² atlas plus the
-baked `dirt_ground`, both with a white base factor, so the picked colour is the
-texel itself. Neither has vertex colours. It needs no frame at all — the
+`material.color` times the texel under the hit UV. Every map makes that exact.
+The lobby is four materials off the dungeon's own kit — rock, brick, tiles and
+the doorway's wood — so the room you learn to paint in is built from the
+surfaces you will be hiding against. (It used to be twelve untextured materials
+**named for their own hex**, which was a fine self-check and a bad-looking
+room.) The dungeon is a 1024² swatch atlas plus
+seven photographic materials — brick, rock, wood, gravel, tiles, metal,
+metal_dark — all eight with a white base factor, so the picked colour is the
+texel itself. **The two metals are the only ones a picked colour lies about**,
+since they alone are `metallic 0.35`: what is drawn there is part albedo and
+part highlight, and only the albedo is picked. They are barrel hoops and
+grates, so nothing is meant to hide against them.
+**The atlas stays a PNG for this reason**: its swatches are flat cells with hard
+edges, and JPEG would bleed one into the next exactly where a picker lands. Neither has vertex colours. It needs no frame at all — the
 ray is cast in the pointer handler.
 
 **Skinned meshes are excluded on purpose.** `SkinnedMesh.raycast` costs ~6 ms a
