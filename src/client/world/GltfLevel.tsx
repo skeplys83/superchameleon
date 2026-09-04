@@ -13,38 +13,25 @@ import { checkLevel, prepareLevel, type LevelCollider } from "./levelScene";
 import { ShadowBudget } from "./ShadowBudget";
 import type { GameMap } from "@/shared/maps";
 
-/**
- * A map authored in Blender and exported as one `.glb`.
- *
- * The file is read by convention, and the conventions are in
- * `world/CLAUDE.md`: an object named for a collider is collision and is never
- * drawn, everything else is decoration and is never collided with, and lights
- * are lights. All of the reading is `levelScene.ts`; this file is the mounting.
- */
 export function GltfLevel({ level }: { level: GameMap }) {
   const { scene } = useGLTF(level.src);
-  // Subscribed once here rather than in every `Proxy`: a furnished map has
-  // hundreds of them, and they all show and hide together anyway.
   const showCollision = useDevMode();
 
-  // In a `useMemo` rather than an effect, so the `ROOM_SURFACE` meshes below
-  // exist by the time `players/Player.tsx` collects them — see invariant 9.
+  // useMemo (not effect) so ROOM_SURFACE meshes exist by the time Player
+  // collects them (invariant 9).
   const prepared = useMemo(
     () =>
       prepareLevel(scene, { lights: level.render.lights, matte: level.render.matte }),
     [scene, level.render.lights, level.render.matte],
   );
 
-  // The one thing the deleted build step used to guarantee. See `checkLevel`.
   useEffect(() => {
     if (import.meta.env.DEV) checkLevel(level, prepared);
   }, [level, prepared]);
 
   return (
     <>
-      {/* No light of any kind is added here. Every lamp in the game is an
-          object in a .blend — see invariant 15. */}
-      {/* No `RigidBody`: nothing that is drawn is collided with. */}
+      {/* No lights added here — every lamp is in the .blend (invariant 15). */}
       <primitive object={prepared.scene} />
       {(level.render.lights?.shadow?.budget ?? 0) > 0 && (
         <ShadowBudget lamps={prepared.lamps} budget={level.render.lights!.shadow!.budget!} />
@@ -56,13 +43,8 @@ export function GltfLevel({ level }: { level: GameMap }) {
   );
 }
 
-/**
- * The invisible mesh a shot, the ground test and the camera all raycast.
- *
- * It exists alongside every collider because the two answer different
- * questions: rapier decides where a body can stand, `ROOM_SURFACE` decides what
- * a shot stops on. A collider on its own is a wall you can shoot through.
- */
+// The invisible mesh a shot, ground test and camera raycast — colliders alone
+// are walls you can shoot through.
 function Proxy({
   children,
   show,
@@ -70,9 +52,7 @@ function Proxy({
   ...placement
 }: {
   children?: ReactNode;
-  /** Drawn only in developer mode, and only while its toggle is on. */
   show: boolean;
-  /** Floor, wall or ceiling. The follow camera raycasts only these. */
   shell?: boolean;
   geometry?: THREE.BufferGeometry;
   position?: THREE.Vector3;
@@ -81,9 +61,8 @@ function Proxy({
   return (
     <mesh name={ROOM_SURFACE} userData={SHELL_FLAG(shell)} {...placement}>
       {children}
-      {/* `visible` sits on the *material*, because three's raycaster skips an
-          object whose own `visible` is false and this one has to stay findable.
-          Developer mode is what draws it — see `src/game/dev.ts`. */}
+      {/* visible on the MATERIAL, not the mesh — three's raycaster skips an
+          object whose own visible is false, and this must stay findable. */}
       <meshBasicMaterial
         visible={show}
         wireframe
@@ -94,14 +73,6 @@ function Proxy({
   );
 }
 
-/**
- * One collision object. A standalone collider is fixed, which is what every
- * piece of a map is.
- *
- * Hulls and trimeshes carry their world transform in their vertices, so those
- * colliders stay at the origin and only the proxy is placed.
- */
-/** One object, so every non-shell proxy shares it rather than allocating. */
 const NOT_SHELL = { shell: false };
 const IS_SHELL = { shell: true };
 const SHELL_FLAG = (shell: boolean) => (shell ? IS_SHELL : NOT_SHELL);

@@ -4,13 +4,11 @@ import { onCaught, onShot, onWhistle, remotes } from "@/client/net";
 import { playSound, updateListener } from "./engine";
 import { Stepper, jitteredStepRate, strideFor } from "./footsteps";
 
-/** Nothing is preloaded here, and there is no mount effect that fetches. */
 export function SoundStage() {
   const steppers = useRef(new Map<string, Stepper>());
 
-  // A shot is heard at the shooter, not at what they hit. `remotes` never holds
-  // you, so your own gun comes back positionless — which is right, it is at your
-  // ear, and a panner at zero distance behaves badly.
+  // Your own shot resolves to no position — remotes never holds you — which
+  // is right (a panner at zero distance misbehaves).
   useEffect(
     () =>
       onShot((shooterId) => {
@@ -24,9 +22,6 @@ export function SoundStage() {
     [],
   );
 
-  // A whistle comes from whoever let it out, so it gives their position away.
-  // Your own resolves to no position — `remotes` never holds you — which is
-  // right: it is at your own head, and a panner at zero distance behaves badly.
   useEffect(
     () =>
       onWhistle((whistlerId) => {
@@ -38,9 +33,7 @@ export function SoundStage() {
     [],
   );
 
-  // Everyone hears a catch, at the spot it happened — which is how the
-  // chameleons still hiding learn the hunt is closing in, and roughly where.
-  // It is positional for exactly that reason, unlike the three round sounds.
+  // Positional so hiding chameleons hear roughly where the hunt is closing in.
   useEffect(
     () =>
       onCaught((_victimId, _by, position) => {
@@ -49,9 +42,7 @@ export function SoundStage() {
     [],
   );
 
-  // Priority 1, for the same reason as `combat/Viewmodel`: the listener copies
-  // the camera, so it must run after the frame that places it. Mount order does
-  // not guarantee that — see `Scene.tsx`.
+  // Priority 1 — listener copies the camera, must run after it is placed.
   useFrame(({ camera }, delta) => {
     updateListener(camera);
 
@@ -63,8 +54,7 @@ export function SoundStage() {
         live.set(id, stepper);
       }
       const { x, y, z } = remote.target;
-      // Climbing is silent. Their stepper only sees a position, and sliding
-      // along a wall or walking a ceiling looks exactly like walking a floor.
+      // Climbing is silent — a wall slide looks like a floor walk to a stepper.
       if (remote.target.cling) {
         stepper.reset();
         continue;
@@ -74,7 +64,6 @@ export function SoundStage() {
       }
     }
 
-    // Drop steppers for anyone who has left, or the map grows for the session.
     if (live.size > remotes.size) {
       for (const id of live.keys()) if (!remotes.has(id)) live.delete(id);
     }

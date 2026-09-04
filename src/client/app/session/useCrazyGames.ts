@@ -13,7 +13,6 @@ import { randomName } from "@/shared/names";
 import { DEFAULT_MAP } from "@/shared/mapIds";
 import type { RoomInfo } from "@/client/net";
 
-/** The size an instant-multiplayer lobby is opened at when none is joinable. */
 const INSTANT_LOBBY_SIZE = 8;
 
 type Options = {
@@ -24,14 +23,8 @@ type Options = {
   joinCode: (who: string, code: string) => void;
 };
 
-/**
- * The portal's three entry points, and the one report back.
- *
- * Every call here is inert unless the SDK says we are in its `local` or
- * `crazygames` environment *and* a crazygames.com frame is above us — see
- * `crazygames.ts`. On a direct visit this hook does nothing at all, and the
- * `?code=` URL invite is what carries an invite instead.
- */
+// Inert unless the SDK is in local/crazygames env AND a crazygames frame is
+// above us — see crazygames.ts. Direct visits use the ?code= URL invite instead.
 export function useCrazyGames({ joined, room, name, create, joinCode }: Options) {
   useEffect(() => {
     let active = true;
@@ -39,14 +32,14 @@ export function useCrazyGames({ joined, room, name, create, joinCode }: Options)
     void initCrazySDK().then(async () => {
       if (!active) return;
 
-      // 1. Launched with an invite room code — a portal invite or ?code=.
+      // 1. Portal invite / ?code=
       const inviteCode = getInitialInviteRoom();
       if (inviteCode) {
         joinCode(randomName(), inviteCode);
         return;
       }
 
-      // 2. Instant multiplayer: take an open game if there is one, else open one.
+      // 2. Instant multiplayer: join or create.
       if (!isInstantMultiplayer()) return;
       const playerName = randomName();
       try {
@@ -63,7 +56,7 @@ export function useCrazyGames({ joined, room, name, create, joinCode }: Options)
       }
     });
 
-    // 3. A live invitation, arriving while this tab is already in a game.
+    // 3. Live invitation while already in a game.
     const onLiveInvite = (params: Record<string, string>) => {
       const targetRoom = params?.roomId || params?.roomName;
       if (targetRoom) joinCode(name || randomName(), targetRoom);
@@ -76,7 +69,6 @@ export function useCrazyGames({ joined, room, name, create, joinCode }: Options)
     };
   }, [create, joinCode, name]);
 
-  /** Report where this player is, so friends can be shown a way in. */
   useEffect(() => {
     if (!joined || !room) {
       leaveCrazyRoom();

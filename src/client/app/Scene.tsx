@@ -20,61 +20,22 @@ import type { Role } from "@/shared/protocol";
 import type { Brush } from "@/client/paint/brush";
 import type { Grave } from "@/client/net";
 
-/**
- * Frames drawn per second, at most. `requestAnimationFrame` already pins the
- * loop to the display's refresh rate, so this only ever takes it *down* — which
- * on a 120Hz panel is half the GPU work, and this game is fragment-bound.
- */
 const MAX_FPS = 60;
 
-/** The fallback for a map that names no `dpr`. A module constant rather than a
- *  literal at the use site, because `HuntVision` restores it out of an effect
- *  and a fresh array every render would resize the renderer every render. */
+// Module constant — a fresh array every render would resize the renderer.
 const DEFAULT_DPR: [number, number] = [1, 2];
 
-/**
- * What a hunter sees through during the hunt: framebuffer pixels per CSS pixel,
- * so a half is a quarter of the pixels, upscaled back to fill the window. The
- * one number that tunes how blind the hunt is.
- *
- * **Absolute, rather than a fraction of the map's own `dpr`.** r3f resolves a
- * `[min, max]` range against the display, so the map's `[1, 1.5]` is 1.5 on a
- * retina panel and 1 on a plain one; scaling those by a common factor would
- * hand the player with the better screen a sharper hunt, which is an advantage
- * bought with hardware. One flat number means every hunter looks for
- * chameleons through the same pixels.
- */
+// Absolute (not a fraction of the map's dpr) so hardware cannot buy a sharper
+// hunt — the hospital's [1, 1.5] is 1.5 on retina and 1 on plain.
 const HUNT_DPR = 0.3;
 
-/**
- * How that half-resolution frame is scaled back up to fill the window.
- *
- * `"auto"` lets the browser interpolate — a soft blur, which is what smears a
- * still chameleon into the wall it is painted to match. `"pixelated"` is the
- * crunchy alternative: nearest-neighbour quantises into blocks rather than
- * smearing, and reads more PSX. One word, either way; `HUNT_DPR` is the knob
- * for *how much*, this is the knob for *which kind*.
- */
+// "auto" = soft browser interpolation (smears a still chameleon into the wall).
+// "pixelated" = crunchy nearest-neighbour.
 const HUNT_UPSCALE = "auto";
 
-/**
- * Draws at most `fps` frames a second.
- *
- * **Passing a priority above 0 turns off r3f's automatic render**, which is what
- * makes this possible at all: this callback then owns `gl.render`, and skipping
- * it skips the frame. Movement, physics and input still tick at the full refresh
- * rate and only the expensive pass is throttled — input latency and rapier's
- * stability are untouched.
- *
- * **Frame priorities are the game's one ordering guarantee**, and this is the
- * one that draws:
- *
- * | 0 | movement, physics, input — everything that decides where things are |
- * | 1 | anything that must copy a result, i.e. `combat/Viewmodel` off the camera |
- * | 2 | this, which draws |
- * | 3 | anything that must read the drawn frame back — the eyedropper in
- *       `players/Player.tsx`, which samples the framebuffer it just produced |
- */
+// Priority > 0 disables r3f's automatic render, so this owns gl.render.
+// Frame priorities: 0 movement/physics/input · 1 things copying from those
+// (viewmodel, listener) · 2 draw · 3 read the drawn frame back (eyedropper).
 function FrameLimiter({ fps }: { fps: number }) {
   const carry = useRef(0);
 
@@ -82,17 +43,14 @@ function FrameLimiter({ fps }: { fps: number }) {
     const interval = 1 / fps;
     carry.current += delta;
 
-    // Half a frame of slack, or a 60Hz display asking for 60fps loses every
-    // frame whose delta lands a hair under the interval.
+    // Half-frame slack — a 60Hz screen asking for 60fps otherwise misses
+    // every frame whose delta lands a hair under the interval.
     if (carry.current < interval - delta / 2) return;
 
-    // Carry the remainder so the long-run average holds, but never bank more
-    // than a frame of it: after a stall or a backgrounded tab the accumulated
-    // debt would otherwise force a burst of catch-up renders.
+    // Cap the accumulated debt so a backgrounded tab does not force catch-up.
     carry.current = Math.min(carry.current - interval, interval);
     gl.render(scene, camera);
-    // The eyedropper reads the framebuffer at priority 3 and must not read one
-    // this frame never wrote — see `paint/eyedropper.ts`.
+    // The eyedropper (priority 3) must not read a frame this did not draw.
     markDrawn();
     if (DEV) reportDraw();
   }, 2);
@@ -116,21 +74,13 @@ export default function Scene({
   picking,
   onPicked,
 }: {
-  /** Which map this room is playing, straight from room state. */
   map: string;
-  /** The map this room is about to send everyone to, so its textures can be
-   *  uploaded from a lobby nobody is in a hurry to leave. */
   nextMap?: string | null;
-  /** Which room this is — its invite code, which is its id. */
   room: string;
   role: Role | null;
-  /** The round is over and the survivors are being shown. */
   reveal: boolean;
-  /** The hunt is on. Hidden players lose their name badges for the duration. */
   hunting: boolean;
-  /** This player is rooted to the spot but may still look around. */
   frozen: boolean;
-  /** Where each chameleon was found. */
   graves: Grave[];
   painting: boolean;
   paused: boolean;
@@ -143,29 +93,10 @@ export default function Scene({
   const render = chosen.render;
   const dpr = render.dpr ?? DEFAULT_DPR;
 
-  /**
-   * The hunter's handicap: a chameleon lying still against the wall it is
-   * painted to match is exactly what a low resolution destroys, so the hunt
-   * gets harder without taking anything the player needs to *play*. The HUD
-   * surviving is not a trick — `hud/` renders outside the Canvas, so this
-   * cannot reach it, and the crosshair is the CSS cursor. Only the world
-   * degrades — **the shotgun viewmodel included, deliberately**: it is drawn
-   * in-canvas, and a sharp gun held against a soft world is the thing that
-   * would look broken.
-   *
-   * **Gated on the phase as much as on the role**: everyone in a lobby is
-   * nominally a hunter, so the role alone would pixelate the waiting room.
-   *
-   * **It stays on through the reveal.** It used to lift at the gong, which
-   * handed every hunter a sharp picture of the spots that had just beaten them
-   * — the one view of a hiding place they had spent five minutes failing to
-   * find. The survivors are the exhibit and they see it clearly; the people who
-   * could not find them go on looking through the same picture they lost
-   * through. It lifts on the way back to the lobby, when the phase is neither.
-   */
+  // Stays on through the reveal — a hunter never gets a clean look at the
+  // spot that beat them. HuntVision is gated on exactly this pair.
   const blinded = role === "hunter" && (hunting || reveal);
 
-  // Both debug pictures follow the toggle, so this re-renders on the flip.
   const devMode = useDevMode();
 
   return (
@@ -174,8 +105,7 @@ export default function Scene({
         shadows={render.shadows?.enabled ?? true}
         camera={{ fov: 60, position: [0, 5, 11] }}
         dpr={blinded ? HUNT_DPR : dpr}
-        // Goes on r3f's wrapper div and reaches the canvas because
-        // `image-rendering` inherits.
+        // image-rendering inherits from r3f's wrapper.
         style={{ imageRendering: blinded ? HUNT_UPSCALE : "auto" }}
         gl={{ antialias: render.antialias ?? true }}
         onCreated={({ gl, scene }) => {
@@ -183,15 +113,10 @@ export default function Scene({
           gl.toneMappingExposure = render.exposure ?? 1;
           gl.outputColorSpace = THREE[render.outputColorSpace ?? "SRGBColorSpace"];
           gl.shadowMap.enabled = render.shadows?.enabled ?? true;
-          // Deliberately not `PCFSoftShadowMap`: deprecated in three 0.185,
-          // which warns and falls back to this anyway. See `shared/maps.ts`.
+          // Not PCFSoftShadowMap: deprecated in three 0.185.
           gl.shadowMap.type = THREE[render.shadows?.type ?? "PCFShadowMap"];
-          // **This callback runs once, at Canvas creation, and never again.**
-          // Everything above is read from whichever map happened to be current
-          // then — the lobby map, usually — so a later map's tone mapping,
-          // exposure and shadow settings only apply if the Canvas was rebuilt
-          // with it. Printed in dev because a renderer configured for the wrong
-          // map looks like a map that is simply wrong.
+          // Runs once, at Canvas creation — a later map's tone mapping etc.
+          // only apply if the Canvas is rebuilt.
           if (DEV) {
             console.info(
               `renderer configured once, at Canvas creation: ` +
@@ -213,8 +138,6 @@ export default function Scene({
           debug={devMode}
         >
           <Room map={map} />
-          {/* Outside `Room` because it is about the map that is *not* on
-              screen. See `MapWarmer` — this is the hitch at the bell. */}
           <MapWarmer id={nextMap} current={map} />
           {role && (
             <Player

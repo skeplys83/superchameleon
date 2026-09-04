@@ -1,40 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { POSES } from "@/client/figure/poses";
 
-/**
- * The pose wheel: hold `R`, flick the mouse at a pose, let go.
- *
- * **It owns the whole gesture** — the key, the mouse, and which wedge is lit —
- * and reports only the two things outside it needs: whether it is up, so the
- * world can hold still under it, and the pose that was picked. `figure/poses`
- * is the one import this folder is allowed from inside the Canvas's half of the
- * app, and a label is all that is taken from it.
- *
- * **Everything here is drawn from `POSES.length`.** The wedges, the gaps, the
- * angle each label sits at and the arc the pointer is matched against all come
- * off one number, so adding a row to the table adds a slice.
- */
+// Hold R, flick, release. Owns the whole gesture. Everything is drawn from
+// POSES.length.
 
 const SIZE = 360;
 const CENTRE = SIZE / 2;
 const R_OUT = 168;
 const R_IN = 68;
-/** Half the gap between two wedges, in radians. */
 const GAP = 0.024;
-/** How far the mouse has to travel before it means a direction rather than a
- *  twitch. The cursor is locked, so this is raw pointer movement in pixels and
- *  the wheel keeps the pose you came in with until it is cleared. */
+// Raw pointer travel — cursor is locked.
 const DEADZONE = 34;
-/** How far the drift is allowed to run. Past this a long flick is clamped, so
- *  coming back the other way turns the choice round immediately instead of
- *  spending half a screen of movement undoing itself. */
+// Clamp so a return flick reverses the choice immediately.
 const REACH = 150;
 
 const point = (r: number, a: number) =>
   `${CENTRE + Math.cos(a) * r} ${CENTRE + Math.sin(a) * r}`;
 
-/** One wedge of the ring. Angles run from straight up, clockwise, which is the
- *  order the number keys are in. */
+// Straight up, clockwise — matches the number-key order.
 function wedgePath(i: number, n: number) {
   const step = (Math.PI * 2) / n;
   const mid = -Math.PI / 2 + i * step;
@@ -57,29 +40,19 @@ export function PoseWheel({
   onPick,
   current,
 }: {
-  /** Whether the key is live at all — a chameleon, playing, with no overlay up. */
   enabled: boolean;
-  /** The world holds still while this is open, so the caller has to know. */
   onOpenChange: (open: boolean) => void;
   onPick: (index: number) => void;
-  /** The pose being held, which is what the wheel opens on. **A getter**: the
-   *  pose lives in the frame loop's half of the app and changing it does not
-   *  re-render this tree, so a number here would be whatever it was when the
-   *  HUD last drew. */
+  // Getter — the pose lives in the frame loop and does not re-render this tree.
   current: () => number;
 }) {
   const n = POSES.length;
   const [open, setOpen] = useState(false);
   const [choice, setChoice] = useState(0);
-  /** Whether the pointer has left the deadzone yet — the difference between
-   *  "still holding what I had" and "aiming at this one". */
   const [aiming, setAiming] = useState(false);
-  /** Accumulated pointer movement since the wheel opened. There is no cursor to
-   *  read — this is a locked pointer — so the direction is integrated from the
-   *  deltas, and clamped so it cannot wander out of reach. */
+  // Accumulated pointer movement — no cursor to read (locked).
   const drift = useRef({ x: 0, y: 0 });
-  /** Read by the key-up handler, which must not be re-bound on every mouse
-   *  move: a listener replaced mid-gesture is a gesture that never finishes. */
+  // Refs — the key-up handler must not be re-bound mid-gesture.
   const choiceRef = useRef(0);
   const openRef = useRef(false);
 
@@ -94,9 +67,6 @@ export function PoseWheel({
     [onOpenChange, onPick],
   );
 
-  // The wheel cannot outlive the state that allowed it: a caught chameleon, a
-  // round ending, a menu opening. Dismissed without committing — the player
-  // never let go of the key, so they never chose anything.
   useEffect(() => {
     if (!enabled) close(false);
   }, [enabled, close]);
@@ -115,8 +85,7 @@ export function PoseWheel({
       drift.current.x = 0;
       drift.current.y = 0;
       setAiming(false);
-      // Opened on the pose already being held, so letting go without moving is
-      // deliberately a no-op rather than a jump to whatever is at the top.
+      // Open on the pose already held — letting go without moving is a no-op.
       const held = current();
       choiceRef.current = held;
       setChoice(held);
@@ -141,7 +110,6 @@ export function PoseWheel({
       }
       if (len < DEADZONE) return;
       setAiming(true);
-      // Zero is straight up and the angle grows clockwise, matching the wedges.
       const angle = Math.atan2(d.x, -d.y);
       const step = (Math.PI * 2) / n;
       const next = ((Math.round(angle / step) % n) + n) % n;
@@ -150,8 +118,8 @@ export function PoseWheel({
       setChoice(next);
     };
 
-    // A key held while the tab goes away never sends its key-up, and a wheel
-    // left on screen would swallow the next R as an already-open one.
+    // Tab-away swallows the key-up — close so the next R does not think we are
+    // already open.
     const onBlur = () => close(false);
 
     window.addEventListener("keydown", onKeyDown);
@@ -170,18 +138,13 @@ export function PoseWheel({
 
   const step = (Math.PI * 2) / n;
   const labelR = (R_IN + R_OUT) / 2;
-  /** The needle points at the wedge that is lit rather than at the raw pointer:
-   *  the drift lives in a ref, which render may not read, and the wedge is the
-   *  thing the gesture is actually going to commit. */
+  // Needle points at the committed wedge, not the raw pointer.
   const aim = -Math.PI / 2 + choice * step;
 
   return (
     <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center bg-black/25">
-      {/* Sized in rem, not in `SIZE`: the viewBox keeps every coordinate below in
-          user space, so the whole wheel — wedges, needle and the three font sizes
-          that are user units — rides the root scale in one step. `DEADZONE` and
-          `REACH` are untouched by that: the cursor is locked, so they are raw
-          pointer movement and never measured against what is drawn. */}
+      {/* Sized in rem; viewBox keeps every coordinate in user space so the
+          whole wheel rides root scale. DEADZONE/REACH stay in raw pixels. */}
       <svg className="h-[22.5rem] w-[22.5rem]" viewBox={`0 0 ${SIZE} ${SIZE}`}>
         {POSES.map((p, i) => {
           const mid = -Math.PI / 2 + i * step;
@@ -220,7 +183,6 @@ export function PoseWheel({
             </g>
           );
         })}
-        {/* Where the mouse is pointing, so the flick has something to aim. */}
         {aiming && (
           <line
             x1={CENTRE}

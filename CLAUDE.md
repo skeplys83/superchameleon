@@ -198,6 +198,22 @@ change, so it was demoted: each short doc links to its archive.
 **The rule going forward:** if a test can assert it, write the test instead of
 the paragraph. Prose cannot fail CI.
 
+## Comments in code
+
+**Be scarce. The default is no comment.** A well-named identifier already says
+what a line does; a comment that repeats it is noise. The folder `CLAUDE.md`
+files are where design reasoning lives — not per file, and not per function.
+
+Write a comment only when it documents a **specific decision** or a
+**non-obvious why** that a reader could not derive from the code: a numbered
+trap being applied, a workaround for a known bug, a subtle invariant, a value
+that must line up with something in another file. One short line, at the site
+it matters. No JSDoc-style paragraphs on internal functions or constants. No
+"this exists because" essays — those belong in the folder doc, once.
+
+Do not narrate what the code is about to do, what a variable will be used for,
+or what a name already tells you.
+
 |                                        |                                                                                               |
 | -------------------------------------- | --------------------------------------------------------------------------------------------- |
 | [docs/TRAPS.md](docs/TRAPS.md)         | eight project-wide traps. **Numbered, and referenced by number from code all over the repo.** |

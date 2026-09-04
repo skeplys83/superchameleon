@@ -9,27 +9,10 @@ import {
   type PlayerDebug,
 } from "@/client/app/dev";
 
-/**
- * The developer-mode readout: what the local player is doing, and every number
- * of the pose they are holding.
- *
- * Only mounted in a developer build, so it is absent from the built image — see
- * `src/game/dev.ts`. It reads a module-level snapshot rather than props,
- * because what it displays is written from inside the frame loop.
- *
- * **The chip is the toggle**, and it is always there while the readout is
- * mounted — the one thing that must not disappear when developer mode goes off
- * is the way back on. It sits *below* the readout so it does not move as the
- * numbers above it grow and shrink.
- */
-
-/** Ten samples a second. The frame loop writes at sixty; re-rendering this tree
- *  that often to watch numbers a human is reading is pure waste, and a slower
- *  sample is also *more* readable — digits stop flickering. */
+// 10 Hz sample — the loop writes at 60; slower is more readable too.
 const SAMPLE_MS = 100;
 
-/** Every joint of a `Pose`, in the order the body is built from — the arms
- *  twice over, since the table states those per side. */
+
 function jointRows(pose: Pose): [string, Joint][] {
   return [
     ["torso", pose.torso],
@@ -49,8 +32,7 @@ function jointRows(pose: Pose): [string, Joint][] {
 
 const num = (n: number, places = 2) => n.toFixed(places);
 
-/** A number that is zero is written by nobody: dim it, so the ones a pose
- *  actually sets are the ones the eye lands on. */
+// Zero angles dim so the ones a pose sets are what the eye lands on.
 function Angle({ value, className }: { value: number | undefined; className: string }) {
   const set = value !== undefined && value !== 0;
   return (
@@ -98,8 +80,6 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
     tps: 0,
   });
 
-  // Nothing is sampled while the readout is off — the interval is the only cost
-  // this thing has when nobody is looking at it.
   useEffect(() => {
     if (!on) return;
     let draws = debugDraws();
@@ -126,9 +106,8 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
   const pose: Pose | null = player ? POSES[player.pose] : null;
 
   return (
-    // Clear of `hud/ChatPanel`, which owns bottom-left at `w-80`. Offset
-    // always rather than only in a lobby: a dev chip that moves about between
-    // rooms is harder to find than one that does not.
+    // Offset unconditionally to clear ChatPanel (w-80) — a chip that moves
+    // between rooms is harder to find.
     <div className="pointer-events-none absolute bottom-4 left-[22rem] z-30 flex w-60 select-none flex-col items-start gap-1.5 font-mono text-[0.625rem] leading-[1.4] tabular-nums text-neutral-300 antialiased">
       {on && (
         <div className="max-h-[calc(100dvh-5rem)] w-full overflow-y-auto rounded border border-lime-400/25 bg-black/95 px-3 py-2">
@@ -182,8 +161,6 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
                 <span className="text-cyan-300">{player.firstPerson ? "first" : "third"}</span>
                 <span className="text-cyan-300">{num(player.zoom, 1)}</span>
               </Row>
-              {/* The list every raycast in the frame loop walks — see `world/`,
-                  invariant 25. The first number to look at if movement feels heavy. */}
               <Row label="surfaces">
                 <span className={player.surfaces ? "text-cyan-300" : "text-orange-400"}>
                   {player.surfaces}
@@ -219,8 +196,6 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
                 <Angle value={pose?.offsetZ} className="text-sky-300" />
               </Row>
 
-              {/* Every joint, set or not: the ones sitting at zero are as much a
-                  fact about the pose as the ones that are dialled. */}
               <Head>joints · x spread twist</Head>
               {pose &&
                 jointRows(pose).map(([label, joint]) => (
@@ -231,8 +206,7 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
         </div>
       )}
 
-      {/* The toggle. `pointer-events-auto` on this and nothing else, so the
-          readout above it never eats a click meant for the world. */}
+      {/* pointer-events-auto only on this — the readout must not eat clicks. */}
       <button
         type="button"
         onClick={toggleDevMode}
@@ -250,9 +224,8 @@ export function DebugPanel({ map, phase }: { map: string; phase: string }) {
         >
           DEV
         </span>
-        {/* Drawn frames, then frame-loop ticks. They differ on purpose: the
-            loop runs at the refresh rate and `MAX_FPS` throttles only the
-            draw — see `reportDraw` in `src/game/dev.ts`. */}
+        {/* Draws, then loop ticks — the loop runs at refresh rate, MAX_FPS
+            throttles only the draw. */}
         {on ? (
           <span>
             <span className="text-lime-300">{fps.toFixed(0)} fps</span>

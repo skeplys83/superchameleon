@@ -1,10 +1,7 @@
 import type { Server } from "colyseus";
 import { GameRoom } from "./room.ts";
 
-/**
- * Both room types, in one place. `index.ts` and the tests call this, so a suite
- * that passes is a suite that ran against the wiring production uses.
- */
+// Called by both index.ts and the tests, so tests exercise production wiring.
 export function defineRooms(gameServer: Server) {
   gameServer.define("lobby", GameRoom);
   gameServer.define("match", GameRoom);

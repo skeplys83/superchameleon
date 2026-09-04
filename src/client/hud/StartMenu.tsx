@@ -10,10 +10,8 @@ import { getInitialInviteRoom } from "@/client/app/crazygames";
 import { DEV } from "@/client/app/dev";
 import { BUTTON_QUIET, INPUT, LABEL } from "./ui";
 
-/** The name lives in `sessionStorage`, scoped to the tab. */
 const NAME_KEY = "mc_name";
 
-/** How often the games list is refreshed while this menu is in front. */
 const SESSION_POLL_MS = 5000;
 
 function readName() {
@@ -28,7 +26,7 @@ function writeName(name: string) {
   try {
     sessionStorage.setItem(NAME_KEY, name);
   } catch {
-    // No storage available — the name will not survive a reload.
+    // Name will not survive a reload.
   }
 }
 
@@ -44,7 +42,6 @@ export function StartMenu({
     maxPlayers: number,
   ) => void;
   onJoinCode: (name: string, code: string) => void;
-  /** Dev builds only: straight into a round, second window and all. */
   onQuickPlay: (name: string) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
@@ -83,7 +80,6 @@ export function StartMenu({
     };
   }, []);
 
-  /** The legal page replaces this menu, so the lobby behind it is unchanged. */
   const [legal, setLegal] = useState(false);
 
   const takeName = () => {

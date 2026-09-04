@@ -2,25 +2,8 @@ import { playableMaps } from "@/shared/maps";
 import { DEV } from "@/client/app/dev";
 import { LABEL } from "./ui";
 
-/**
- * The maps this build ships, shown rather than named.
- *
- * It lists what `playableMaps` allows, not `MAP_LIST`: the lobby map is the waiting
- * room everybody starts in rather than somewhere you go, and a map still being
- * built is offered by dev builds only.
- *
- * **It takes the left third of the menu**, against two thirds for the game
- * select. No plate and no border around it: the cards carry their own, and a
- * second frame around a column of framed cards is chrome for nothing.
- *
- * **It fills the height its parent gives it and scrolls inside**, so the menu
- * keeps the same shape however many maps exist — a list that grew the page would
- * push Create and Join off the bottom the moment a fourth map landed.
- *
- * The preview is a placeholder. When there are real images, drop an `<img>` in
- * place of the panel below and keep the `aspect-video` box: the card is sized
- * from that ratio, not from the image.
- */
+// Shows playableMaps (skips the lobby map and any DEV_ONLY). Fills its
+// parent's height and scrolls inside.
 export function MapList() {
   const maps = playableMaps(DEV);
 
@@ -38,8 +21,7 @@ export function MapList() {
             className="overflow-hidden rounded-3xl border-2 border-neutral-700 bg-neutral-900"
           >
             <div
-              // Placeholder. Diagonal hatching rather than a flat grey, so it
-              // reads as "no image yet" instead of as a broken one.
+              // Diagonal hatching placeholder — reads as "no image yet".
               className="flex aspect-video items-center justify-center border-b border-neutral-800 bg-[repeating-linear-gradient(45deg,rgb(23,23,23)_0px,rgb(23,23,23)_10px,rgb(31,31,31)_10px,rgb(31,31,31)_20px)]"
             >
               <span className={`text-neutral-600 ${LABEL}`}>preview</span>

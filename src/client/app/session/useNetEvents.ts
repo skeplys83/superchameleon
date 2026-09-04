@@ -19,18 +19,8 @@ type Handlers = {
   closeOverlays: () => void;
 };
 
-/**
- * Every subscription this component holds on the network, in one place.
- *
- * **A change of room is a clean slate, and `onLeftRoom` is the one place that
- * says so.** Anything that belongs to a room resets there — paint and looping
- * sounds here, marks and graves elsewhere. Do not add a second mechanism; a
- * reset that lives somewhere else is one a future feature will not know to join.
- */
+// A change of room is a clean slate — onLeftRoom is the one place that says so.
 export function useNetEvents({ setRoom, setDropped, setError, closeOverlays }: Handlers) {
-  // Every later change to the room — the host starting the match, a new host, a
-  // different map queued up, the clock — arrives as a patch rather than a
-  // return value.
   useEffect(() => onRoom(setRoom), [setRoom]);
 
   useEffect(
@@ -43,17 +33,13 @@ export function useNetEvents({ setRoom, setDropped, setError, closeOverlays }: H
     [],
   );
 
-  /** Carried into a different room, which clears whatever was open over the old one. */
   useEffect(() => onMoved(closeOverlays), [closeOverlays]);
 
-  // A hand-off that left you behind. Whichever room you are in is still yours
-  // to sit in, so this is a message and not an exit.
   useEffect(
     () => onMoveFailed((reason) => setError(`Could not change room. ${reason}`)),
     [setError],
   );
 
-  /** The socket died. */
   useEffect(
     () =>
       onDropped(() => {

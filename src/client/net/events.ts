@@ -4,70 +4,47 @@ export type NetMark = {
   id: string;
   position: [number, number, number];
   rotation: [number, number, number];
-  /** Where the shot came from. The tracer is drawn from here to `position`. */
   origin: [number, number, number];
 };
 
-/** Where a chameleon was found, in world space, and who it was. */
 export type Grave = { id: string; position: [number, number, number]; name: string };
 
-/** One line of lobby chat. `id` is a counter, read only as a React key — the
- *  list arrives whole, so nothing tracks a line by it. */
+// id is a counter, used only as a React key.
 export type ChatMessage = { id: string; name: string; text: string };
 
-/** Which room you are in and what it is doing. */
 export type RoomInfo = {
   mode: "lobby" | "match";
-  /** Which side you are on *here*. */
   role: Role;
-  /** The geometry this room is running right now. */
   map: string;
-  /** The map a lobby will start on. Equal to `map` in a match. */
+  // Equal to `map` in a match.
   nextMap: string;
-  /** The invite code — the room's id. Worth reading out only for a lobby. */
+  // Invite code — the room's id.
   code: string;
-  /** Whether this client holds the Start button. */
   isHost: boolean;
-  /** Whether this lobby shows up in the menu's list of games. Always false for
-   *  a match. Decided at creation and never changed. */
   isListed: boolean;
-  /** The invite code of the game this room belongs to: a lobby's own code, and
-   *  for a match the lobby to go back to. */
+  // For a match: the lobby to go back to.
   lobbyCode: string;
-  /** Seconds left in whatever this room is counting. */
   timeLeft: number;
-  /** What the room is doing, as opposed to which kind of room it is. */
   phase: Phase;
   winner: string;
-  /** How many players this game holds. The host chose it when they opened it. */
   maxPlayers: number;
-  /** How many are here now — for "4 / 8", and for knowing when full is full. */
   playerCount: number;
 };
 
-/** Where the shot came from — a session id, because every client already knows
- *  where that player is and a position on the wire would only be staler. */
+// Session ids on the wire — every client already knows where that player is.
 const shotListeners = new Set<(shooterId: string) => void>();
-/** Who whistled. Like a shot, the position is looked up locally from `remotes`. */
 const whistleListeners = new Set<(whistlerId: string) => void>();
 const markListeners = new Set<(mark: NetMark) => void>();
 const graveListeners = new Set<(grave: Grave) => void>();
-/** What has been said in this lobby *since we arrived*, re-sent whole whenever
- *  a line lands. Nothing is replayed on join: chat is a broadcast and the
- *  server keeps none of it. Whole rather than per-line because that is the
- *  shape the panel takes, and `client.ts` owns the rolling copy. */
+// Whole list each time (the panel takes it that way); client.ts holds the copy.
 const chatListeners = new Set<(messages: ChatMessage[]) => void>();
-/** Somebody was caught and is now a hunter. */
 const caughtListeners = new Set<
   (victimId: string, by: string, position?: [number, number, number]) => void
 >();
 const roomListeners = new Set<(info: RoomInfo) => void>();
-/** A start that could not take you with it — you are still in the lobby. */
 const moveFailedListeners = new Set<(reason: string) => void>();
-/** The room went away without us asking it to. */
 const droppedListeners = new Set<() => void>();
 const movedListeners = new Set<() => void>();
-/** The room you were in is gone — drop everything that belonged to it. */
 const leftRoomListeners = new Set<() => void>();
 
 export function onLeftRoom(fn: () => void) {

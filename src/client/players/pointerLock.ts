@@ -1,11 +1,8 @@
-/**
- * The canvas is created inside the r3f tree but the pause menu lives outside
- * it, so the element both need is kept here.
- */
+// The canvas lives inside r3f but the pause menu lives outside — element kept here.
 let target: HTMLCanvasElement | null = null;
 let retry: ReturnType<typeof setTimeout> | null = null;
 
-/** Roughly how long the browser refuses a re-lock after Esc released one. */
+// Rough window during which the browser refuses a re-lock after Esc.
 const RETRY_MS = 250;
 const RETRY_ATTEMPTS = 8;
 
@@ -14,7 +11,6 @@ export function setLockTarget(canvas: HTMLCanvasElement | null) {
   if (!canvas) cancelLock();
 }
 
-/** The element the lock is taken on, for anyone needing to compare against it. */
 export function lockTargetEl() {
   return target;
 }
@@ -23,11 +19,9 @@ export function isLocked() {
   return !!target && document.pointerLockElement === target;
 }
 
-/** Take the pointer back, and keep asking until it works. */
 export function requestLock() {
   cancelLock();
 
-  /** A missing target is a reason to wait, not to give up. */
   let left = RETRY_ATTEMPTS;
   const attempt = () => {
     retry = null;
@@ -43,7 +37,7 @@ export function requestLock() {
         void (pending as Promise<void>).catch(() => {});
       }
     } catch {
-      // Refused for now; the retry below is the whole plan.
+      // Refused for now — the retry is the plan.
     }
 
     if (--left > 0) retry = setTimeout(attempt, RETRY_MS);
@@ -51,7 +45,6 @@ export function requestLock() {
   attempt();
 }
 
-/** Stop trying. */
 export function cancelLock() {
   if (retry) clearTimeout(retry);
   retry = null;

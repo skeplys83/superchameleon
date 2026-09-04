@@ -2,21 +2,11 @@ import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { recentColors, subscribeColors, WHITE } from "@/client/paint/palette";
 import { MAX_SIZE, MIN_SIZE, type Brush } from "./brush";
 
-/**
- * The wheel's *backing* resolution, and nothing to do with how big it is drawn.
- *
- * **It used to be both**, at 208, which was also exactly the panel's inner
- * width — `w-[14.5rem]` is 232px and `p-3` takes 24 of them. Two numbers in
- * different files that had to agree to the pixel, with no slack: the wheel
- * spilled past the panel the moment either moved. It is laid out at `w-full`
- * now and cannot overflow whatever the panel is; this only decides how many
- * pixels the gradient is generated at.
- */
+// Backing resolution, not drawn size — wheel is laid out w-full.
 const WHEEL = 256;
 
-/** One channel of HSV→RGB, 0..1. Kept numeric and separate from the hex form:
- *  the wheel redraws whole every time the brightness moves, and going through a
- *  string per pixel made that 43 000 allocations a frame. */
+// Numeric, separate from hex — a hex string per pixel would be 43k allocations
+// per brightness change.
 function hsvChannel(n: number, h: number, s: number, v: number) {
   const k = (n + h * 6) % 6;
   return v - v * s * Math.max(0, Math.min(k, 4 - k, 1));
@@ -30,7 +20,7 @@ function hsvToHex(h: number, s: number, v: number) {
   return `#${f(5)}${f(3)}${f(1)}`;
 }
 
-/** The wheel carries hue and saturation, the slider carries value. */
+// Wheel carries hue and saturation; the slider carries value.
 function hexToHsv(hex: string) {
   const n = parseInt(hex.slice(1), 16);
   const r = ((n >> 16) & 255) / 255;
@@ -65,11 +55,7 @@ function ColorWheel({
   const canvas = useRef<HTMLCanvasElement>(null);
   const dragging = useRef(false);
 
-  // **Redrawn at the brightness the slider is on.** It used to be drawn once at
-  // full value, on the grounds that a wheel which never changes is a map you
-  // can learn — but the colour you are mixing is the one you are about to
-  // paint, and a wheel glowing at full brightness while the brush is dark
-  // showed every colour except that one.
+  // Redrawn at the current brightness — else the wheel glows while the brush is dark.
   useEffect(() => {
     const el = canvas.current;
     const ctx = el?.getContext("2d");
@@ -92,7 +78,7 @@ function ColorWheel({
         image.data[i] = Math.round(hsvChannel(5, hue, sat, v) * 255);
         image.data[i + 1] = Math.round(hsvChannel(3, hue, sat, v) * 255);
         image.data[i + 2] = Math.round(hsvChannel(1, hue, sat, v) * 255);
-        // Feather the rim so the circle does not look jagged.
+        // Feathered rim.
         image.data[i + 3] = Math.round(255 * Math.min(1, radius - dist));
       }
     }
@@ -110,8 +96,7 @@ function ColorWheel({
     onPick(hue, Math.min(1, Math.hypot(dx, dy) / radius));
   };
 
-  // In per cent, not pixels: the wheel is laid out fluid, so the marker has to
-  // be too or it drifts off the colour it is pointing at at any other size.
+  // Percent, not pixels — wheel is fluid.
   const angle = h * Math.PI * 2;
   const marker = {
     left: `${50 + Math.cos(angle) * s * 50}%`,
@@ -135,7 +120,6 @@ function ColorWheel({
           dragging.current = false;
         }}
       />
-      {/* Where the current colour sits, so the wheel reflects the brush. */}
       <span
         className="pointer-events-none absolute h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow"
         style={{ left: marker.left, top: marker.top, background: hsvToHex(h, s, v) }}
@@ -144,7 +128,6 @@ function ColorWheel({
   );
 }
 
-/** The palette. */
 export function PaintPanel({
   open,
   onOpenChange,
@@ -164,8 +147,6 @@ export function PaintPanel({
   onClear: () => void;
 }) {
   const { h, s, v } = useMemo(() => hexToHsv(brush.color), [brush.color]);
-  // The colours this tab has painted with. Client-side and in memory only —
-  // `palette.ts` says why a history beat a fixed row of presets.
   const recent = useSyncExternalStore(subscribeColors, recentColors);
 
   if (!open) {
@@ -233,9 +214,7 @@ export function PaintPanel({
         or right-drag across your body
       </p>
 
-      {/* The three actions, one row, one size. They were scattered — pick full
-          width here, white and clear tucked in beside the size readout — which
-          made three equal choices look like one heading and two footnotes. */}
+      {/* Three equal actions in one row. */}
       <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
         <button
           onClick={() => onPickingChange(!picking)}
@@ -266,8 +245,6 @@ export function PaintPanel({
         </button>
       </div>
 
-      {/* Empty until something has been painted, and nothing stands in for it:
-          a row of placeholders is a row of buttons that do nothing. */}
       {recent.length > 0 && (
         <>
           <div className="mt-3 text-xs uppercase tracking-wide text-neutral-400">

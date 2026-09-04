@@ -3,23 +3,17 @@ import { characterGeometry } from "@/client/figure/model";
 import { buildSurface, dab, settleGutter, type Surface } from "./surface";
 import { MAX_STROKES } from "@/shared/protocol";
 
-/** Per-player paint. One canvas per body: the body is a single skinned mesh
- *  wearing a single continuous unwrap, so a stroke is just a point in that
- *  unwrap and there is no per-part bookkeeping at all. */
-
 export type Skin = THREE.CanvasTexture;
 
 export type Stroke = {
   u: number;
   v: number;
-  /** Brush radius in figure-local units — the same physical dot everywhere on the body. */
   size: number;
   color: string;
 };
 
 const TEXTURE_SIZE = 1024;
 
-/** Built once from the model, the first time anybody paints. */
 let surface: Surface | null = null;
 function getSurface() {
   if (!surface) {
@@ -29,8 +23,6 @@ function getSurface() {
   return surface;
 }
 
-/** The canvas behind a skin, kept as pixels so a dab can be composited without
- *  reading the whole texture back on every dot. */
 type Painted = { texture: Skin; canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D; image: ImageData };
 const painted = new Map<string, Painted>();
 
@@ -39,11 +31,9 @@ function hexToRgb(hex: string): [number, number, number] {
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-/** Everything painted on a body, so a part re-mount can repaint from scratch. */
 const skins = new Map<string, Skin>();
 const history = new Map<string, Stroke[]>();
 
-/** Local player's id in these maps; remotes use their Colyseus session id. */
 export const SELF = "self";
 
 export { MAX_STROKES };
@@ -74,8 +64,6 @@ export function paint(id: string, stroke: Stroke) {
   const s = getSurface();
   if (!s) return;
 
-  // The dab is a sphere on the body, so it cannot leak across a UV seam onto a
-  // limb you never touched — see `surface.ts`.
   const rect = dab(s, entry.image, stroke.u, stroke.v, stroke.size, hexToRgb(stroke.color));
   if (rect) {
     entry.ctx.putImageData(
@@ -98,22 +86,10 @@ export function paint(id: string, stroke: Stroke) {
   settleSoon(id);
 }
 
-/** How long after the last dab the gutter is repainted. Long enough that a
- *  drag pays for it once rather than per dab, short enough to be over before
- *  anyone looks at the result. */
+// Debounced megapixel pass — a drag pays once, not per dab.
 const SETTLE_MS = 200;
 const settling = new Map<string, ReturnType<typeof setTimeout>>();
 
-/**
- * Repaint the far gutter once the brush stops moving — the deep-mip fix, see
- * `settleGutter` in `surface.ts`.
- *
- * **Debounced, and it walks the whole atlas**, which is why it does not live in
- * `paint`: a drag is hundreds of dabs a second and this is a megapixel pass.
- * Nothing depends on it having run — it changes only what the far mips average
- * to, so a frame drawn before it lands is the old halo for another fifth of a
- * second.
- */
 function settleSoon(id: string) {
   clearTimeout(settling.get(id));
   settling.set(
@@ -133,8 +109,7 @@ function settleSoon(id: string) {
 export function clearSkin(id: string) {
   const entry = painted.get(id);
   if (!entry) return;
-  // A settle still pending would repaint the gutter from the body it no longer
-  // has, a fifth of a second after the wipe.
+  // A pending settle would repaint the gutter from a body that no longer exists.
   clearTimeout(settling.get(id));
   settling.delete(id);
   entry.ctx.fillStyle = "#ffffff";
@@ -144,7 +119,6 @@ export function clearSkin(id: string) {
   history.set(id, []);
 }
 
-/** Drop every body's paint, yours included. */
 export function forgetAllSkins() {
   for (const id of [...skins.keys()]) forgetSkin(id);
 }
@@ -156,8 +130,7 @@ export function forgetSkin(id: string) {
   history.delete(id);
 }
 
-/** Compact wire form — strokes are stored per player on the server, so they
- *  have to stay small. `u,v,size,rrggbb`, about 24 characters. */
+// Compact wire form: `u,v,size,rrggbb` — ~24 chars.
 export function encodeStroke(s: Stroke) {
   return [s.u.toFixed(3), s.v.toFixed(3), s.size.toFixed(3), s.color.replace("#", "")].join(",");
 }

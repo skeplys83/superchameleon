@@ -1,61 +1,29 @@
 import * as THREE from "three";
 
-/**
- * Painting on the body rather than on its texture.
- *
- * A brush dab is a *sphere in the body's own space*, not a circle in UV space.
- * Drawing a circle into the texture was wrong in two visible ways: a dab that
- * reached the edge of a UV island spilled onto whatever island happened to be
- * packed beside it — paint appearing somewhere you never touched — and the same
- * dab was cut along the seam, which is the torn, notched edge it left behind.
- *
- * Here a texel is painted if and only if the point on the body it belongs to is
- * inside the sphere, so seams stop existing as far as the brush is concerned:
- * both sides of a cut are painted from the same test, and no unrelated island
- * is ever touched.
- */
+// A brush dab is a sphere in body-space, not a circle in UV — drawing to UV
+// spills onto neighbouring islands and cuts along seams.
 
 export type Surface = {
-  /** Bind-space vertex positions, UVs, and the triangle index. */
   pos: Float32Array;
   uv: Float32Array;
   tri: Uint32Array;
-  /** One face normal per triangle, so a dab cannot paint through the body. */
   faceNormal: Float32Array;
-  /** Triangles bucketed by UV cell, for finding what a hit's UV landed on. */
   uvGrid: Map<number, number[]>;
-  /** Triangles bucketed by position, for finding what a sphere reaches. */
   posGrid: Map<number, number[]>;
   cell: number;
-  /** Texel coverage and the padding map, built on first use — see `coverage`. */
   pad: Pad | null;
 };
 
-/**
- * Which texels the model actually covers, and where the ones just outside it
- * should copy their colour from.
- *
- * A texture is sampled with bilinear filtering and mipmaps, so at the edge of a
- * UV island the GPU mixes painted texels with the empty gutter beside them. On
- * a white canvas that reads as a **white hairline tracing every seam** across
- * the body. The cure is standard and has to happen on every write: paint the
- * gutter too, by copying outward from the nearest covered texel.
- */
 type Pad = {
   size: number;
   covered: Uint8Array;
-  /** Reused by `settleGutter`, which is a breadth-first walk of the whole
-   *  atlas and would otherwise allocate four megabytes every time it runs. */
   queue: Int32Array;
 };
 
-/** How far paint is pushed into the gutter. Enough for bilinear and the first
- *  couple of mip levels; beyond that a seam is cheaper to leave than to pad. */
+// Enough for bilinear and the first mip levels; the rest is settleGutter's job.
 const PAD_TEXELS = 6;
 
 const UV_CELLS = 64;
-/** In figure-local units. A brush is ~0.06, so this keeps buckets small but
- *  means a dab rarely touches more than a handful of them. */
 const POS_CELL = 0.08;
 
 const key3 = (x: number, y: number, z: number) => (x + 512) * 1048576 + (y + 512) * 1024 + (z + 512);
@@ -133,7 +101,6 @@ export function buildSurface(geometry: THREE.BufferGeometry): Surface | null {
   return { pos, uv, tri, faceNormal, uvGrid, posGrid, cell: POS_CELL, pad: null };
 }
 
-/** Barycentric weights of a point in a triangle's UV, or null if outside. */
 function barycentric(
   s: Surface,
   t: number,
@@ -160,13 +127,8 @@ function barycentric(
   return w0 >= e && w1 >= e && w2 >= e ? [w0, w1, w2] : null;
 }
 
-/**
- * Where on the body a UV lands: its position and the face normal there.
- *
- * A hit exactly on an island edge belongs to no triangle by the strict test, so
- * the nearest one in the same bucket is taken instead — otherwise a click on a
- * seam silently paints nothing.
- */
+// Falls back to the nearest tri in the bucket when a hit lands exactly on a
+// seam — otherwise a click on the edge paints nothing.
 export function locate(s: Surface, u: number, v: number) {
   const gx = Math.floor(u * UV_CELLS);
   const gy = Math.floor(v * UV_CELLS);
@@ -209,20 +171,13 @@ export function locate(s: Surface, u: number, v: number) {
   };
 }
 
-/**
- * How soft the edge of a dab is, as a fraction of its radius — about one texel
- * at the default brush size. The edge is meant to read as *sharp*; this exists
- * only so it is not a staircase of hard texels.
- */
 const FEATHER = 0.05;
-/** A dab may not wrap onto a surface facing away from the one it landed on —
- *  otherwise painting between the thighs paints both of them. */
+// A dab may not wrap onto a face turned away — otherwise painting between the
+// thighs paints both.
 const FACING_MIN = 0.0;
 
 export type Dirty = { x0: number; y0: number; x1: number; y1: number } | null;
 
-/** Rasterise every triangle once to learn which texels the body covers, then
- *  flood outward from them so each gutter texel knows what to mirror. */
 function coverage(s: Surface, size: number): Pad {
   if (s.pad && s.pad.size === size) return s.pad;
   const covered = new Uint8Array(size * size);
@@ -247,34 +202,9 @@ function coverage(s: Surface, size: number): Pad {
   return s.pad;
 }
 
-/**
- * Grow the body outward across the whole atlas: every texel off the model takes
- * the colour of the nearest texel on it.
- *
- * **Padding alone cannot fix a mipmapped atlas.** The flood in `dab` reaches
- * `PAD_TEXELS`, which covers bilinear and the first couple of mip levels — but
- * the unwrap covers only about a quarter of the texture, so that flood is under
- * a tenth of the gutter. Everything past it is still whatever the canvas was
- * cleared to, and a hunter sees the world at `HUNT_DPR`, where the figure is
- * about sixty pixels tall against a 1024 atlas — mip four, where one texel is
- * an average of sixteen by sixteen. At that depth the gutter is most of what is
- * being averaged, and since a blank canvas is white, a body painted black comes
- * back ringed in white speckle.
- *
- * This used to fill that far gutter with **one average of the whole body**,
- * which fails on any body that is not one colour: a chameleon with black legs
- * and unpainted white arms averages to pale grey, so the legs sat in a pale
- * field and every seam and silhouette wore a thin light stripe wherever
- * anisotropy or a mip reached seven texels off the island. The fix is the
- * standard one and it is not an average at all — dilate. A nearest-body colour
- * everywhere means a deep mip averages the body against more of the same body,
- * whatever is painted where.
- *
- * A breadth-first walk of the atlas from every covered texel at once, so the
- * colour a gutter texel inherits is the nearest one by chessboard distance.
- * Costly enough to be worth doing on a debounce rather than per dab — see
- * `skin.ts`. Returns false when the model covers nothing.
- */
+// Dilate: every gutter texel takes the nearest body texel's colour. Deep mip
+// levels average against more of the same body instead of the canvas fill.
+// Costly enough for skin.ts to debounce it.
 export function settleGutter(s: Surface, image: ImageData): boolean {
   const size = image.width;
   const pad = coverage(s, size);
@@ -285,8 +215,6 @@ export function settleGutter(s: Surface, image: ImageData): boolean {
   for (let i = 0; i < pad.covered.length; i++) if (pad.covered[i]) queue[tail++] = i;
   if (!tail) return false;
 
-  // `covered` doubles as the visited mark: a gutter texel is set the moment it
-  // is claimed, so the first island to reach it wins and nothing is queued twice.
   const seen = pad.covered.slice();
   for (let head = 0; head < tail; head++) {
     const i = queue[head];
@@ -314,10 +242,6 @@ export function settleGutter(s: Surface, image: ImageData): boolean {
   return true;
 }
 
-/**
- * Paint one dab into `image`, returning the texel rectangle it touched.
- * `radius` is in figure-local units, the same units the brush is sized in.
- */
 export function dab(
   s: Surface,
   image: ImageData,
@@ -362,9 +286,7 @@ export function dab(
             s.faceNormal[t * 3 + 2] * hit.nz;
           if (facing < FACING_MIN) continue;
 
-          // Cheap reject before rasterising: a bucket is coarser than the dab,
-          // so most of what it hands back is out of reach. Skipping those here
-          // is the difference between ~10 ms a dab and under one.
+          // Cheap AABB reject — bucket is coarser than the dab.
           const qa = s.tri[t * 3] * 3;
           const qb = s.tri[t * 3 + 1] * 3;
           const qc = s.tri[t * 3 + 2] * 3;
@@ -431,11 +353,9 @@ export function dab(
 
   if (x1 < 0) return null;
 
-  // Push this dab into the gutter around every island it touched, or the seams
-  // show as white hairlines the moment the texture is filtered. The flood
-  // starts from *this dab's* texels rather than from a precomputed map: a
-  // gutter texel can sit between two islands, and it has to mirror the one that
-  // was just painted, not whichever a one-time pass happened to pick.
+  // Flood into the gutter around every island the dab touched — starts from
+  // this dab's texels (not a precomputed map) so between-island gutters mirror
+  // the current dab.
   const pad = coverage(s, size);
   const done = new Set<number>(touched);
   let frontier = touched;

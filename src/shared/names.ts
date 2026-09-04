@@ -1,11 +1,5 @@
-/**
- * Fallback player names.
- *
- * **Here rather than in `client/hud/` because both halves read them now.** The
- * client offers one in the name box; the server hands one out when it takes a
- * name away, so a player who types something unrepeatable becomes `Gecko42`
- * rather than being refused a seat.
- */
+// Fallback names — both halves read them. Client offers one in the name box;
+// server hands one out when clean.ts refuses a name.
 export const NAMES = [
   "Gecko",
   "Iguana",

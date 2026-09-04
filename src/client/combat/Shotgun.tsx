@@ -1,13 +1,5 @@
-/**
- * The shotgun prop, barrel pointing down -Z. Shared by the hunter's own
- * viewmodel and by the figure other players see.
- *
- * **It casts no shadow**, for both of the things it is. As a viewmodel it hangs
- * off the camera, so a shadow from it is thrown by nothing anybody can see; and
- * on a body it is the one piece of a player still casting once `figure/`
- * stopped — a gun-shaped shadow with no owner under it, which gives away more
- * than the body would have.
- */
+// Casts no shadow — as a viewmodel it hangs off the camera, and on a body
+// its shadow would be a gun-shape with no visible owner.
 export function Shotgun({ scale = 1 }: { scale?: number }) {
   return (
     <group scale={scale}>

@@ -1,38 +1,13 @@
 import * as THREE from "three";
 
-/**
- * Finding the point on your own body under the cursor, without paying three's
- * skinned raycast.
- *
- * **`SkinnedMesh.raycast` re-skins the model for every ray, three times per
- * triangle.** It walks the index buffer and calls `applyBoneTransform` on each
- * vertex of each triangle as it tests it — 28,692 bone transforms for this
- * body's 9,564 triangles — and it does that again for the next ray. Measured on
- * `player.glb`: **6.15 ms per ray**, whether it hits or misses. That is a third
- * of a frame for one mouse move, and `brushCursor`'s tolerant search fires up to
- * 25 rays when a drag runs off a limb: **~153 ms**, which is a visible freeze
- * rather than a slow frame.
- *
- * The fix is to separate the two halves. Skinning depends on the pose, not on
- * the ray, so it is done **once** — per vertex rather than per triangle corner,
- * which is 5,745 transforms instead of 28,692 — and cached. Every ray after
- * that is a plain triangle sweep over a flat `Float32Array`, with the posed
- * bounding box rejecting anything that misses the body entirely.
- *
- * Nothing here is paint-specific except where it lives; `combat/shoot.ts` still
- * uses three's raycast, because a shot happens twice a second at most.
- */
+// Fast body pick. SkinnedMesh.raycast re-skins the model per ray (6.15 ms
+// each on player.glb) — a tolerant search of 25 rays would freeze. Skinning
+// is done once per frame, cached; every ray after is a flat triangle sweep.
+// combat/shoot.ts still uses three's raycast (a shot is at most 2 Hz).
 
-/**
- * How long a skinned snapshot is reused, in milliseconds. One frame at 120 Hz,
- * so a gesture's worth of rays share one pass and a walking, posing player is
- * never picked against a body more than a frame stale — which is less than the
- * distance the cursor moves between two mouse events anyway.
- */
 const MAX_AGE_MS = 8;
 
 type Posed = {
-  /** World-space vertex positions, in the geometry's own vertex order. */
   positions: Float32Array;
   box: THREE.Box3;
   at: number;
@@ -47,7 +22,6 @@ const pvec = new THREE.Vector3();
 const tvec = new THREE.Vector3();
 const qvec = new THREE.Vector3();
 
-/** The body as it is posed *now*, skinned once and kept for `MAX_AGE_MS`. */
 function poseOf(mesh: THREE.SkinnedMesh): Posed {
   const cached = posed.get(mesh);
   const now = performance.now();
@@ -60,8 +34,6 @@ function poseOf(mesh: THREE.SkinnedMesh): Posed {
 
   for (let i = 0; i < attribute.count; i++) {
     vertex.fromBufferAttribute(attribute, i);
-    // Bind pose → posed, then posed → world. The skeleton's matrices are from
-    // the last render, which is the same frame the cursor is being read against.
     mesh.applyBoneTransform(i, vertex);
     vertex.applyMatrix4(mesh.matrixWorld);
     positions[i * 3] = vertex.x;
@@ -79,17 +51,14 @@ function poseOf(mesh: THREE.SkinnedMesh): Posed {
 }
 
 export type BodyHit = {
-  /** Where on the unwrap the ray landed — what a stroke is written in. */
   u: number;
   v: number;
-  /** World space, both of them. */
   point: THREE.Vector3;
   normal: THREE.Vector3;
   distance: number;
 };
 
-/** One shared result, valid until the next call. A pick is read immediately by
- *  the only caller there is, and a gesture fires up to 25 of them. */
+// One shared result, valid until the next call — a gesture fires up to 25.
 const result: BodyHit = {
   u: 0,
   v: 0,
@@ -98,15 +67,10 @@ const result: BodyHit = {
   distance: 0,
 };
 
-/** Barely-not-zero, for the determinant that says a ray is parallel to a face. */
 const EPSILON = 1e-10;
 
-/**
- * The nearest front face of `mesh` along `ray`, or null.
- *
- * Front faces only, matching three's default `FrontSide` material: without that
- * a cursor over an arm would sometimes pick the inside of the chest behind it.
- */
+// Front faces only (matches three's default FrontSide) — else the inside of
+// the chest behind an arm is sometimes picked.
 export function pickBody(mesh: THREE.SkinnedMesh, ray: THREE.Ray): BodyHit | null {
   const { positions, box } = poseOf(mesh);
   if (!ray.intersectsBox(box)) return null;
@@ -129,8 +93,7 @@ export function pickBody(mesh: THREE.SkinnedMesh, ray: THREE.Ray): BodyHit | nul
     const b = tri[t * 3 + 1] * 3;
     const c = tri[t * 3 + 2] * 3;
 
-    // Möller–Trumbore, with the culling branch: a negative determinant is a
-    // face pointing away, and those are the ones `FrontSide` discards.
+    // Möller-Trumbore with culling branch.
     edge1.set(positions[b] - positions[a], positions[b + 1] - positions[a + 1], positions[b + 2] - positions[a + 2]);
     edge2.set(positions[c] - positions[a], positions[c + 1] - positions[a + 1], positions[c + 2] - positions[a + 2]);
     pvec.crossVectors(direction, edge2);
@@ -166,8 +129,7 @@ export function pickBody(mesh: THREE.SkinnedMesh, ray: THREE.Ray): BodyHit | nul
   result.distance = bestT;
   result.point.copy(ray.direction).multiplyScalar(bestT).add(ray.origin);
 
-  // The face's own normal, in world space already: the positions it is built
-  // from are posed, so nothing has to be transformed afterwards.
+  // Positions are already world-posed — no transform needed.
   edge1.set(positions[b * 3] - positions[a * 3], positions[b * 3 + 1] - positions[a * 3 + 1], positions[b * 3 + 2] - positions[a * 3 + 2]);
   edge2.set(positions[c * 3] - positions[a * 3], positions[c * 3 + 1] - positions[a * 3 + 1], positions[c * 3 + 2] - positions[a * 3 + 2]);
   result.normal.crossVectors(edge1, edge2).normalize();

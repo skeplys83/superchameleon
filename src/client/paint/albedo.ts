@@ -1,36 +1,16 @@
 import * as THREE from "three";
 import { ROOM_SURFACE } from "@/client/world/surface";
 
-/**
- * The *albedo* under the cursor — the surface's own colour, before any light
- * touched it.
- *
- * **This is what the eyedropper has to return, and reading the drawn pixel is
- * not.** Paint is applied as a `map` on a `MeshStandardMaterial`, so whatever
- * the picker hands back is used as albedo and then lit and tone-mapped like
- * everything else. Feed it the *displayed* pixel and the room's lighting is
- * applied a second time: pick a floor at 40% brightness, paint it on, and the
- * body renders at 16%. That is the "I picked the ground and it came out way
- * darker" — the darker the map, the worse it got, which is why the dungeon
- * showed it and the old white arena barely did.
- *
- * Albedo against albedo is also simply what camouflage means. Two surfaces with
- * the same base colour under the same light render the same colour, which is
- * the whole trick a chameleon is trying to pull.
- *
- * Every map makes this exact rather than approximate: each is a swatch atlas
- * or photographic material with a white base factor, and none carries vertex
- * colours. The two metals in the dungeon are the one place a picked colour
- * flatters — see `paint/CLAUDE.md`.
- */
+// Paint is albedo (a `map` on MeshStandardMaterial). Feeding it the *drawn*
+// pixel applies the room's lighting twice — a floor at 40% comes out at 16%.
 
 const ray = new THREE.Raycaster();
 const ndc = new THREE.Vector2();
 const out = new THREE.Color();
 const texel = new THREE.Color();
 
-/** Decoded pixels per texture, so an atlas is read back from the GPU-bound
- *  image once rather than on every click. */
+// Decoded pixels per texture — atlases are read back from the GPU-bound image
+// once, not per click.
 const decoded = new WeakMap<THREE.Texture, ImageData | null>();
 
 function pixelsOf(texture: THREE.Texture): ImageData | null {
@@ -54,8 +34,7 @@ function pixelsOf(texture: THREE.Texture): ImageData | null {
       ctx?.drawImage(image as CanvasImageSource, 0, 0);
       data = ctx?.getImageData(0, 0, width, height) ?? null;
     } catch {
-      // A tainted canvas. Nothing here is cross-origin, but a failed read must
-      // fall back to the material's own colour rather than throw on a click.
+      // Tainted canvas — fall back rather than throw on a click.
       data = null;
     }
   }
@@ -63,19 +42,16 @@ function pixelsOf(texture: THREE.Texture): ImageData | null {
   return data;
 }
 
-/** The texture's own colour at a UV, in the working (linear) space. */
 function sample(texture: THREE.Texture, uv: THREE.Vector2): THREE.Color | null {
   const pixels = pixelsOf(texture);
   if (!pixels) return null;
 
-  // Wrapped rather than clamped: a UV outside 0..1 is how tiling is expressed,
-  // and `Math.floor` handles negatives the way `%` does not.
+  // Wrap, not clamp — UV outside 0..1 is how tiling is expressed.
   let u = uv.x * texture.repeat.x + texture.offset.x;
   let v = uv.y * texture.repeat.y + texture.offset.y;
   u -= Math.floor(u);
   v -= Math.floor(v);
-  // glTF textures load with `flipY` off, canvases with it on. The row a UV
-  // names depends on which.
+  // glTF loads flipY off; canvases have it on.
   if (texture.flipY) v = 1 - v;
 
   const x = Math.min(pixels.width - 1, Math.floor(u * pixels.width));
@@ -100,19 +76,13 @@ function materialAt(mesh: THREE.Mesh, hit: THREE.Intersection): Coloured | null 
   return (material[hit.face?.materialIndex ?? 0] as Coloured) ?? null;
 }
 
-/**
- * Everything worth sampling. Gathered rather than raycast wholesale, because
- * `SkinnedMesh.raycast` re-skins the model per triangle and costs about 6 ms a
- * ray (see `pick.ts`) — with several players on screen a single click would
- * drop a frame. Bodies are excluded on those grounds; scenery is the point.
- */
+// SkinnedMesh excluded — see pick.ts. A click sampling several players would
+// drop a frame.
 function candidates(scene: THREE.Object3D): THREE.Mesh[] {
   const list: THREE.Mesh[] = [];
   scene.traverseVisible((object) => {
     const mesh = object as THREE.Mesh;
     if (!mesh.isMesh || (mesh as THREE.SkinnedMesh).isSkinnedMesh) return;
-    // The collision layer is drawn only in developer mode and is never a colour
-    // anybody is looking at.
     if (mesh.name === ROOM_SURFACE) return;
     const material = mesh.material;
     if (!Array.isArray(material) && material.visible === false) return;
@@ -121,14 +91,7 @@ function candidates(scene: THREE.Object3D): THREE.Mesh[] {
   return list;
 }
 
-/**
- * The surface colour under a click, as an `#rrggbb` in sRGB, or null when the
- * ray hit nothing with a colour — the sky, or empty background. The caller
- * falls back to reading the drawn pixel there, which for an unlit background is
- * the right answer anyway.
- *
- * `ndcX`/`ndcY` are normalised device coordinates: −1..1, y up.
- */
+// Returns null on sky/background — the caller falls back to reading the pixel.
 export function albedoAt(
   scene: THREE.Object3D,
   camera: THREE.Camera,

@@ -4,31 +4,12 @@ import { useFrame, useThree } from "@react-three/fiber";
 import * as THREE from "three";
 import { MAPS, safeMapId } from "@/shared/maps";
 
-/**
- * Push the next map's textures onto the GPU before anybody stands on it.
- *
- * **`preloadMap` was only ever half the job.** It fetches the `.glb` and parses
- * it — the images are decoded — but a texture does not reach the GPU until the
- * first frame that *draws* it, and that upload is synchronous. The hospital
- * carries 46 images: twenty-seven 2048², three 4096², the rest smaller. That is
- * 177 megapixels, about 900 MB once it is RGBA in video memory with mipmaps,
- * and it all landed on one frame.
- *
- * Chameleons pay it when they are moved to the map at the start of hiding,
- * where thirty-five seconds of standing about hides it. **The hunter pays it at
- * the bell** — the one moment in the round nobody is willing to wait through.
- *
- * So it is paid in the lobby instead, one texture a frame, while the player is
- * walking around a map that is already resident. By the bell there is nothing
- * left to upload.
- */
+// Uploads the next map's textures one per frame in the lobby, so the hunter
+// does not pay ~900 MB of synchronous mipmap builds at the bell.
 
-/** Textures uploaded per frame. One, because a single 4096² is already tens of
- *  milliseconds on its own and the point is to *not* be a hitch — there are
- *  thousands of frames in a lobby and 46 textures to get through. */
+// One per frame — a single 4096² is already tens of ms.
 const PER_FRAME = 1;
 
-/** Every map slot three is going to have to upload. */
 const SLOTS = [
   "map",
   "normalMap",
@@ -62,12 +43,10 @@ function texturesOf(scene: THREE.Object3D): THREE.Texture[] {
 }
 
 function Warm({ src }: { src: string }) {
-  // Suspends until the file is parsed — which is why the caller wraps this in
-  // its own `Suspense`. Nothing else may be inside that boundary: a map still
-  // arriving would otherwise blank the room the player is standing in.
+  // Suspends until parsed — caller wraps in its own Suspense so the current
+  // map is not blanked.
   const { scene } = useGLTF(src);
   const gl = useThree((state) => state.gl);
-  /** Null until the first frame, so the traverse is not done during render. */
   const queue = useRef<THREE.Texture[] | null>(null);
 
   useFrame(() => {
@@ -75,7 +54,6 @@ function Warm({ src }: { src: string }) {
     const left = queue.current;
     for (let i = 0; i < PER_FRAME && left.length; i++) {
       const texture = left.pop();
-      // Uploads and builds the mipmaps, exactly as the first draw would have.
       if (texture) gl.initTexture(texture);
     }
   });
@@ -83,11 +61,6 @@ function Warm({ src }: { src: string }) {
   return null;
 }
 
-/**
- * @param id The map this room is about to send everyone to, or null.
- * @param current The map already on screen — warming that one is work already
- *   done, and a lobby names itself as its own `nextMap` between rounds.
- */
 export function MapWarmer({ id, current }: { id?: string | null; current: string }) {
   if (!id || safeMapId(id) === safeMapId(current)) return null;
   return (
