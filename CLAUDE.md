@@ -4,6 +4,25 @@ A multiplayer hide-and-seek game. Chameleons are stick figures who can lie on
 their side to pass as scenery; hunters hunt them in first person with a shotgun.
 No accounts, no third-party services.
 
+## Start here
+
+**Read the doc in every folder you edit, not just this one.** Each folder under
+`src/` carries its own forty-line doc — what is in it, the three rules that will
+bite you, and its contracts with the folders around it. They are the only thing
+standing between you and a trap that does not error, and the pre-commit hook
+will refuse a commit that changes a folder's code without touching its doc. The
+map is [The three-way split](#the-three-way-split) below;
+[docs/TRAPS.md](docs/TRAPS.md) is the eight project-wide ones, numbered and
+referenced by number from code all over the repo.
+
+**`CLAUDE.md` and `AGENTS.md` are the same file.** Every folder that has one has
+both — `AGENTS.md` is a symlink to `CLAUDE.md` beside it, so an agent that
+looks for either name finds the same doc. Edit `CLAUDE.md`; the link follows.
+
+Before you finish: `npm run typecheck && npm test && npm run lint`. See
+[Checking your work](#checking-your-work). Do not run the game yourself to check
+a visual change — ask, and it will be run for you.
+
 A central server serves all players over web and WebSocket connections. It is
 **not deployed to a serverless platform**: the game is one long-lived process
 holding websocket rooms, which is the opposite of what those platforms do.
@@ -23,7 +42,7 @@ the dungeon, hiding included):
    and because a latecomer has no time to load the map they are about to be
    moved to. Anyone this game already knows still gets in, so a blink inside the
    ten seconds is not an ejection.
-2. **hiding**, `HIDE_SECONDS` (35s). The chameleons are moved to the map. **The hunter is not** —
+2. **hiding**, `HIDE_SECONDS` (40s). The chameleons are moved to the map. **The hunter is not** —
    they stay in the lobby, playing the arena alone, so they cannot watch anybody
    choose a spot.
 3. **hunt**, the rest of the round. The bell rings, the hunter is brought in.
@@ -200,7 +219,7 @@ commit`.
 | command             | what it proves                                                                                                                                          |
 | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `npm run typecheck` | both projects compile, and neither half used the other's globals                                                                                        |
-| `npm test`          | 112 tests: the server suite in `src/server/test/` over the rooms, the draw, the clock, the lobby's chat, what the wire is allowed to say, and the filter — plus the two headless client suites in `src/client/players/test/`, the room bounds and the follow camera |
+| `npm test`          | 125 tests: the server suite in `src/server/test/` over the rooms, the draw, the clock, the lobby's chat, what the wire is allowed to say, and the filter — plus the two headless client suites in `src/client/players/test/`, the room bounds and the follow camera |
 | `npm run lint`      | the import boundaries, and the React rules                                                                                                              |
 | `npm run build`     | the client bundles                                                                                                                                      |
 

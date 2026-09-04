@@ -5,8 +5,8 @@
 
 A multiplayer hide-and-seek game. Chameleons are stick figures who can lie
 on their side to pass as scenery; hunters hunt them in first person with a
-shotgun. No internet, no accounts — everything runs on machines on the same
-Wi-Fi.
+shotgun. No accounts and no third-party services: one long-lived Node process
+holds every room, and a player is a name typed into a box.
 
 ## Run it
 
@@ -17,19 +17,30 @@ npm run dev
 
 This starts a custom server (`src/server/index.ts`, TypeScript run
 directly by Node — no build step): the page on `:3000`, served through Vite in
-middleware mode, and a Colyseus game server on `:2567`. It prints a local-network URL —
-other players on the same Wi-Fi open that.
+middleware mode, and a Colyseus game server on `:2567`. In production both run
+on the single `PORT`.
 
 Press **Create game** and you get a waiting room in the arena with a four-letter
 code. Games are public by default and show up in everyone's menu with a player
 count, or untick the box and hand the code out yourself — either way the code is
 what gets you in. Everyone waits armed. When the host presses Start, the whole
 room moves to the chosen map, one player keeps the shotgun and the rest become
-chameleons. A match runs for sixty seconds; when it ends everyone is back in the
-waiting room and the host can start another. One server runs as many games at once as you like. A code is the only way
-into a game — nothing is listed.
+chameleons.
 
-Env vars: `PORT` (web), `GAME_PORT` (Colyseus), `SESSION_NAME`.
+**A round has four phases and the map decides how long it is** — two minutes in
+the lobby arena, five in the dungeon, four in the hospital. A five-second
+countdown draws the hunter; the chameleons are moved to the map and get
+`HIDE_SECONDS` to hide while the hunter waits alone in the lobby; then the bell
+rings and the hunt runs out the clock. Being caught does not put you out — you
+become a hunter yourself and join the hunt, so the last chameleon is the hardest
+to catch. Chameleons win if the clock runs out with one still free, hunters win
+if the last one is caught. Then twenty seconds of reveal, with the survivors
+pulsing red where they hid and a grave on every spot somebody was found, and
+everyone is back in the lobby to start another. One server runs as many games at
+once as you like.
+
+Env vars: `PORT` (web), `GAME_PORT` (Colyseus), `SESSION_NAME`. The full table
+is under [Hosting it](#hosting-it).
 
 ## Controls
 
@@ -99,8 +110,9 @@ breaks if you bump one of them alone, and it is not obvious.
 
 ### Three listeners, deliberately
 
-`:3000` the page · `:2567` Colyseus · `:24678` Vite's HMR socket in development,
-plus UDP `:41234` for finding other servers on the same network.
+`:3000` the page · `:2567` Colyseus · `:24678` Vite's HMR socket. All three are
+development only: in production Colyseus attaches to the same HTTP server on
+`PORT` and there is no Vite.
 
 They are separate because handing a WebSocket server the HTTP server's `upgrade`
 event destroys every non-matching upgrade — which killed HMR once, which stopped
@@ -110,11 +122,10 @@ worked. Nothing in the web server touches `upgrade`.
 ### Tooling
 
 `tsc --noEmit`, ESLint flat config (`typescript-eslint` + `react-hooks`), and
-`vite build`. Plus three checks of this project's own, run by a pre-commit hook:
+`vite build`. Plus two checks of this project's own, run by a pre-commit hook:
 `check:docs` fails a commit that stages code without the folder doc covering it,
-`check:constants` fails a constant defined twice, and `check:maps` checks map
-assets. Hosting is a Node 22 Docker image carrying `dist/` and `src/`, installed
-`--omit=dev`.
+and `check:constants` fails a constant defined twice. Hosting is a Node 22 Docker
+image carrying `dist/` and `src/`, installed `--omit=dev`.
 
 ## Layout
 
@@ -122,7 +133,8 @@ The code splits three ways, and the split is enforced by ESLint and by two
 tsconfigs rather than by convention. **Each folder documents itself** in a short
 `CLAUDE.md` beside the code: what it owns, the three rules that will bite you,
 and its contracts with the folders around it. The long-form reasoning behind each
-lives in `docs/notes/`.
+lives in `docs/notes/`. Every one of those docs has an `AGENTS.md` symlink beside
+it, so a coding agent finds the same file under whichever name it looks for.
 
 ```
 src/
@@ -201,16 +213,18 @@ it behind the same TLS proxy that fronts the rest.
 ## Working on it
 
 ```bash
+npm run typecheck         # both projects, and neither half using the other's globals
+npm test                  # the server suite plus two headless client suites
+npm run lint              # the import boundaries, and the React rules
+npm run build             # the client bundles
 npm run check:docs        # are the folder docs current with what's staged?
 npm run check:constants   # is any shared constant defined twice?
-npx tsc --noEmit
-npx eslint .
-npm run build
 ```
 
 A pre-commit hook refuses a commit that changes a folder's code without touching
-that folder's `CLAUDE.md` — the docs are the only thing a fresh contributor (or
-coding agent) reads first, so they are gated rather than merely encouraged.
+that folder's `CLAUDE.md` (or its `AGENTS.md` link) — the docs are the only thing
+a fresh contributor or coding agent reads first, so they are gated rather than
+merely encouraged.
 Enable it once per clone:
 
 ```bash
@@ -219,8 +233,11 @@ git config core.hooksPath .githooks
 
 ## Status
 
-Movement, roles, poses, painting, shooting, kills, positional sound, local-network
-discovery, reconnection, and many simultaneous games — lobbies, invite codes,
-sixty-second matches and the trip back to the lobby — all work. Health, a hide
-phase, a win condition and ready-up are not built yet: a round has a length but
-no result.
+Movement, roles, poses, painting, shooting, kills, positional sound,
+reconnection into a held seat, and many simultaneous games — lobbies, invite
+codes, the four round phases, a winner and the trip back to the lobby — all
+work.
+
+Not built: no score across rounds, no ready-up, no health (a catch is instant),
+no spectating (being caught keeps you playing), one spawn point per map, and
+paint has no undo. Each folder's doc ends with the gaps specific to it.

@@ -19,7 +19,16 @@ import { execFileSync } from "node:child_process";
 import { readdirSync } from "node:fs";
 import path from "node:path";
 
-const DOC = "CLAUDE.md";
+/**
+ * The doc filenames, most-canonical first. `CLAUDE.md` is the real file and
+ * `AGENTS.md` is a symlink beside it, because the two live agent conventions
+ * disagree on the name and the docs are worth more than the argument. Either
+ * name staged satisfies the gate: editing through the symlink stages the file
+ * it points at, and an agent that stages the link instead has still done the
+ * reading this check is asking for.
+ */
+const DOCS = ["CLAUDE.md", "AGENTS.md"];
+const DOC = DOCS[0];
 
 /** Files that are documentation or tooling in their own right. */
 const EXEMPT = new Set([
@@ -86,7 +95,9 @@ function findDomains(dir, out = []) {
   } catch {
     return out;
   }
-  if (entries.some((e) => e.isFile() && e.name === DOC)) out.push(dir);
+  // Not `isFile()`: the doc may be reached through the AGENTS.md symlink, and a
+  // symlink is neither a file nor a directory to `readdirSync`.
+  if (entries.some((e) => !e.isDirectory() && DOCS.includes(e.name))) out.push(dir);
   for (const e of entries) {
     if (!e.isDirectory() || IGNORED.has(e.name)) continue;
     findDomains(path.join(dir === "." ? "" : dir, e.name), out);
@@ -115,7 +126,7 @@ for (const file of staged) {
   if (EXEMPT.has(path.basename(file))) continue;
   const domain = domainOf(file);
   if (!domain) continue;
-  if (stagedSet.has(path.join(domain, DOC))) continue;
+  if (DOCS.some((d) => stagedSet.has(path.join(domain, d)))) continue;
   if (!stale.has(domain)) stale.set(domain, []);
   stale.get(domain).push(file);
 }
