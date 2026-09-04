@@ -144,7 +144,11 @@ reads them from there now.
   than by `usePauseControl` — the stopped event never reaches the global one.
 - **`HuntVision` is grain and a vignette over the hunter's own view**, on
   exactly the condition `Scene` blurs on — the hunt *and* the reveal, so a
-  hunter never gets a clean look at the spot that beat them. It exists because `HUNT_DPR` is a
+  hunter never gets a clean look at the spot that beat them. **The vignette
+  half is exported as `Vignette` and mounted for the chameleon too** — during
+  `hiding`, `hunt` and `reveal` — so both sides of the round see the corners
+  close in. No grain on the chameleon: that is a *resolution* handicap for the
+  one player searching, not a decoration. It exists because `HUNT_DPR` is a
   *resolution* handicap: its strength is proportional to how few pixels a
   chameleon covers, so it is mush at twenty metres and nearly free at two, where
   a body still fills hundreds of pixels after the downscale. Grain has the same

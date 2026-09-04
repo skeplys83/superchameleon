@@ -115,6 +115,13 @@ Four things do **not** follow from `BODY`, and three of them are deliberate:
   able to run for cover. Nothing else needs changing with it: the walk cycle's
   phase and the footstep stepper both count *distance travelled*, so the legs
   and the sound slow themselves.
+- **A hunter is slowed once the hunt is on** (`HUNT_SLOWDOWN`, 0.6), through
+  the same `pace` factor `PAINT_SLOWDOWN` uses so walking and turning stay in
+  proportion. Speed is what lets a hunter's eye slide past a still figure
+  painted to match the wall behind it; slowing the search is what the
+  resolution and grain handicaps already lean on. The footstep sound follows on
+  its own — the stepper counts distance travelled, so slower feet mean less
+  frequent falls. `Player.tsx` reads `hunting` from `Scene.tsx`.
 - **The name badge's gap** above a remote head is scaled in `RemotePlayers.tsx`,
   because it is a distance from a body rather than a distance in the room.
 

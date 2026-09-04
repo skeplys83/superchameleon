@@ -222,6 +222,7 @@ export default function Scene({
               role={role}
               spawn={mapSpawn(map)}
               frozen={frozen}
+              hunting={hunting}
               painting={painting}
               paused={paused}
               brush={brush}

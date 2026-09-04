@@ -100,6 +100,17 @@ const TURN_SPEED = 2.6; // rad/s for Q/E
  * than making them slow.
  */
 const PAINT_SLOWDOWN = 0.3;
+/**
+ * What is left of `SPEED` and `TURN_SPEED` for a hunter once the hunt is on.
+ *
+ * A hunter moving too fast is the whole point: at speed the eye slides past a
+ * still figure painted to match the wall behind it. Slowing them turns the
+ * search into a careful sweep, which is what the resolution and grain
+ * handicaps already lean on. Applied to walking and turning together off the
+ * same factor as `PAINT_SLOWDOWN`, for the same reason. The footstep sound
+ * follows on its own — steps are triggered by distance travelled.
+ */
+const HUNT_SLOWDOWN = 0.6;
 /** How fast a walking body swings round to face where it is going. Damping
  *  rather than a snap: a body that turns in one frame reads as the camera
  *  cutting, and a chameleon rounding a corner should lean into it. */
@@ -179,6 +190,7 @@ export function Player({
   painting,
   paused,
   frozen = false,
+  hunting = false,
   brush,
   onBrush,
   picking = false,
@@ -192,6 +204,8 @@ export function Player({
   paused: boolean;
   /** Rooted to the spot, but still able to look around. */
   frozen?: boolean;
+  /** The hunt is on. Slows a hunter down — see `HUNT_SLOWDOWN`. */
+  hunting?: boolean;
   brush: Brush;
   /** Right-dragging the body resizes the brush, so this owns the change. */
   onBrush: (b: Brush) => void;
@@ -441,7 +455,8 @@ export function Player({
     // Both of these are slowed while the palette is up — see `PAINT_SLOWDOWN`.
     // One factor rather than two, so walking and turning stay in proportion:
     // a body that crept but spun would be worse to paint on than either.
-    const pace = painting ? PAINT_SLOWDOWN : 1;
+    const pace =
+      (painting ? PAINT_SLOWDOWN : 1) * (role === "hunter" && hunting ? HUNT_SLOWDOWN : 1);
 
     if (role === "chameleon") {
       m.bodyYaw += (Number(keys.turnLeft) - Number(keys.turnRight)) * TURN_SPEED * pace * delta;

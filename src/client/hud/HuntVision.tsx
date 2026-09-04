@@ -28,19 +28,29 @@ export function HuntVision() {
       {/* The noise itself lives in `index.css` — it needs a keyframe, and that
           is the one stylesheet. */}
       <div className="hunt-grain" />
-      {/* Sight narrowing to the middle. Transparent well past the crosshair so
-          it never eats what is being aimed at; the falloff is all in the outer
-          third, where a chameleon you have not looked at directly is standing. */}
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(ellipse 75% 75% at 50% 50%," +
-            " rgba(0,0,0,0) 34%," +
-            " rgba(0,0,0,0.34) 66%," +
-            " rgba(0,0,0,0.8) 100%)",
-        }}
-      />
+      <Vignette />
     </div>
+  );
+}
+
+/**
+ * The corners falling away, without the grain — used by everyone in the round.
+ * The chameleon gets it too, so a hidden player and the hunter looking for them
+ * both see the world close in around the middle. Transparent well past the
+ * crosshair so it never eats what is being aimed at; the falloff is all in the
+ * outer third.
+ */
+export function Vignette() {
+  return (
+    <div
+      className="pointer-events-none absolute inset-0"
+      style={{
+        background:
+          "radial-gradient(ellipse 75% 75% at 50% 50%," +
+          " rgba(0,0,0,0) 34%," +
+          " rgba(0,0,0,0.34) 66%," +
+          " rgba(0,0,0,0.8) 100%)",
+      }}
+    />
   );
 }

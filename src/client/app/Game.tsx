@@ -18,7 +18,7 @@ import { ChatPanel } from "@/client/hud/ChatPanel";
 import { HunterWait } from "@/client/hud/HunterWait";
 import { DroppedPanel } from "@/client/hud/DroppedPanel";
 import { PhaseBanner } from "@/client/hud/PhaseBanner";
-import { HuntVision } from "@/client/hud/HuntVision";
+import { HuntVision, Vignette } from "@/client/hud/HuntVision";
 import { RoundOverPanel } from "@/client/hud/RoundOverPanel";
 import { DebugPanel } from "@/client/hud/DebugPanel";
 import { PoseWheel } from "@/client/hud/PoseWheel";
@@ -373,6 +373,13 @@ export function Game() {
           a clean look at the spot that beat them. */}
       {role === "hunter" &&
         (room?.phase === "hunt" || room?.phase === "reveal") && <HuntVision />}
+      {/* The chameleon's own vignette: they are hiding through hiding and hunt,
+          and rooted watching through reveal. No grain — that is the hunter's
+          resolution handicap; this is just the corners closing in. */}
+      {role === "chameleon" &&
+        (room?.phase === "hiding" || room?.phase === "hunt" || room?.phase === "reveal") && (
+          <Vignette />
+        )}
       {joined ? (
         <>
           {/* Chameleons only. A hunter walks and shoots, which no legend has

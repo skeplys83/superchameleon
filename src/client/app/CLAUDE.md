@@ -146,6 +146,8 @@ mechanism and the prose that explains it; the component is now composition.
   which frames have a framebuffer worth reading — see `paint/CLAUDE.md`.
 - **`Scene.tsx` passes the phase down as three separate facts** — `reveal`,
   `hunting`, `frozen` — because each is read by a different part of the tree.
+  `hunting` reaches `Player` too, which slows a hunter down for the duration
+  (see `HUNT_SLOWDOWN` in `players/Player.tsx`).
 - **The hunter hunts through a coarser picture, and it is two Canvas props.**
   `blinded` is `role === "hunter" && (hunting || reveal)`; it drops `dpr` to `HUNT_DPR` and
   `HUNT_UPSCALE` decides how that frame is stretched back up — `auto` for the
